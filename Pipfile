@@ -4,10 +4,10 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-dcqc = {editable = true, path = "."}
+fs-synapse = {editable = true, path = "."}
 
 [dev-packages]
-dcqc = {editable = true, path = ".", extras = ["testing", "dev"]}
+fs-synapse = {editable = true, path = ".", extras = ["testing", "dev"]}
 
 [requires]
 python_version = "3.11"

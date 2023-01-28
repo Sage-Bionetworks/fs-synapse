@@ -1,6 +1,6 @@
-# dcqc
+# fs-synapse
 
-Add a short description here!
+A Synapse implementation of the PyFileSystem2 interface.
 
 
 ## Note

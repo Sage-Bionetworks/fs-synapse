@@ -5,14 +5,14 @@ from pathlib import Path
 from tempfile import TemporaryDirectory, TemporaryFile
 
 import pytest
-from fs import ResourceType, errors, open_fs
 from fs.errors import CreateFailed
 from fs.test import FSTestCases
 from synapseclient import Folder, Synapse
 from synapseclient.core.exceptions import SynapseFileNotFoundError, SynapseHTTPError
 
-from dcqc.filesystems.remote_file import RemoteFile
-from dcqc.filesystems.synapsefs import SynapseFS, synapse_errors
+from fs import ResourceType, errors, open_fs
+from fs.synapsefs.remote_file import RemoteFile
+from fs.synapsefs.synapsefs import SynapseFS, synapse_errors
 
 
 @pytest.fixture(scope="session")
@@ -39,11 +39,11 @@ def test_that_synapsefs_can_be_initialized_with_different_roots():
 
     # Path with no Synapse ID
     with pytest.raises(CreateFailed):
-        SynapseFS("DCQC Test Project")
+        SynapseFS("SynapseFS Test Project")
 
     # Path that doesn't start with a Synapse ID
     with pytest.raises(CreateFailed):
-        SynapseFS("DCQC Test Project/syn50557597")
+        SynapseFS("SynapseFS Test Project/syn50557597")
 
 
 @pytest.mark.integration
@@ -55,7 +55,7 @@ def test_that_a_rootless_synapsefs_can_open_a_random_file_by_id(synapse_fs):
 
 def test_for_an_error_with_a_path_that_does_not_start_with_a_synapse_id(synapse_fs):
     with pytest.raises(ValueError):
-        synapse_fs._path_to_synapse_id("DCQC Test Project/syn50555279")
+        synapse_fs._path_to_synapse_id("SynapseFS Test Project/syn50555279")
 
 
 def test_that_a_path_with_multiple_synapse_ids_can_be_traversed(synapse_fs):
