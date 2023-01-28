@@ -10,6 +10,7 @@ from pathlib import Path, PurePosixPath
 from tempfile import NamedTemporaryFile, TemporaryDirectory, mkdtemp
 from typing import Any, BinaryIO, Generator, Optional, Type
 
+from fs import ResourceType
 from fs.base import FS
 from fs.errors import (
     CreateFailed,
@@ -32,8 +33,7 @@ from synapseclient.core.exceptions import SynapseFileNotFoundError, SynapseHTTPE
 from synapseclient.core.utils import iso_to_datetime
 from synapseclient.entity import Entity, File, Folder, Project, is_container
 
-from fs import ResourceType
-from fs.synapsefs.remote_file import RemoteFile
+from synapsefs.remote_file import RemoteFile
 
 RawInfo = Mapping[str, Mapping[str, object]]
 

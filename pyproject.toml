@@ -9,7 +9,7 @@ build-backend = "setuptools.build_meta"
 version_scheme = "no-guess-dev"
 
 [[tool.mypy.overrides]]
-module = "fs.synapsefs"
+module = "synapsefs"
 disallow_untyped_calls = true
 disallow_untyped_defs = true
 disallow_incomplete_defs = true
