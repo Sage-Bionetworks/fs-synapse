@@ -2,6 +2,8 @@ from fs import open_fs
 from fs.base import FS
 
 
+# TODO: Switch to using parse_fs_url() and register.open()
+#       https://github.com/PyFilesystem/pyfilesystem2/pull/561#issuecomment-1407436951
 def open_parent_fs(url: str) -> tuple[FS, str]:
     # Split off prefix to avoid issues with `rpartition("/")`
     scheme, separator, resource = url.rpartition("://")
