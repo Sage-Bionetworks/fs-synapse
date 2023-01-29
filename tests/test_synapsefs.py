@@ -1,3 +1,5 @@
+# TODO: This test suite can probably benefit from being broken up
+
 import json
 import os
 import unittest
@@ -11,51 +13,13 @@ from fs.test import FSTestCases
 from synapseclient import Folder, Synapse
 from synapseclient.core.exceptions import SynapseFileNotFoundError, SynapseHTTPError
 
-from dcqc.filesystems.remote_file import RemoteFile
-from dcqc.filesystems.synapsefs import SynapseFS, synapse_errors
-
-
-@pytest.fixture(scope="session")
-def synapse_fs():
-    yield SynapseFS()
-
-
-@pytest.mark.integration
-def test_that_synapsefs_can_be_initialized_with_different_roots():
-    # Rootless
-    SynapseFS()
-    SynapseFS("")
-
-    # Synapse ID for a project or folder
-    SynapseFS("syn50545516")
-    SynapseFS("syn50557597")
-
-    # Synapse ID and path to a subfolder
-    SynapseFS("syn50545516/TestSubDir")
-
-    # Synapse and path to a file
-    with pytest.raises(CreateFailed):
-        SynapseFS("syn50545516/test.txt")
-
-    # Path with no Synapse ID
-    with pytest.raises(CreateFailed):
-        SynapseFS("DCQC Test Project")
-
-    # Path that doesn't start with a Synapse ID
-    with pytest.raises(CreateFailed):
-        SynapseFS("DCQC Test Project/syn50557597")
-
-
-@pytest.mark.integration
-def test_that_a_rootless_synapsefs_can_open_a_random_file_by_id(synapse_fs):
-    with synapse_fs.open("syn50555279") as infile:
-        contents = infile.read()
-    assert contents == "foobar\n"
+from synapsefs.remote_file import RemoteFile
+from synapsefs.synapsefs import SynapseFS, synapse_errors
 
 
 def test_for_an_error_with_a_path_that_does_not_start_with_a_synapse_id(synapse_fs):
     with pytest.raises(ValueError):
-        synapse_fs._path_to_synapse_id("DCQC Test Project/syn50555279")
+        synapse_fs._path_to_synapse_id("SynapseFS Test Project/syn50555279")
 
 
 def test_that_a_path_with_multiple_synapse_ids_can_be_traversed(synapse_fs):
@@ -106,8 +70,8 @@ def test_that_a_remote_file_without_a_close_on_callable_can_be_closed():
         remote_file.close()
 
 
-def test_that_staging_a_local_file_creates_a_copy(get_data):
-    path = get_data("test.txt")
+def test_that_staging_a_local_file_creates_a_copy():
+    path = Path(__file__)
     local_fs = open_fs(f"osfs://{path.parent}")
     with TemporaryDirectory() as tmp_dir_name:
         tmp_dir_path = Path(tmp_dir_name)
@@ -117,6 +81,39 @@ def test_that_staging_a_local_file_creates_a_copy(get_data):
         local_fs.download(path.name, target_file)
         target_file.close()
         assert target_path.exists()
+
+
+@pytest.mark.integration
+def test_that_synapsefs_can_be_initialized_with_different_roots():
+    # Rootless
+    SynapseFS()
+    SynapseFS("")
+
+    # Synapse ID for a project or folder
+    SynapseFS("syn50545516")
+    SynapseFS("syn50557597")
+
+    # Synapse ID and path to a subfolder
+    SynapseFS("syn50545516/TestSubDir")
+
+    # Synapse and path to a file
+    with pytest.raises(CreateFailed):
+        SynapseFS("syn50545516/test.txt")
+
+    # Path with no Synapse ID
+    with pytest.raises(CreateFailed):
+        SynapseFS("SynapseFS Test Project")
+
+    # Path that doesn't start with a Synapse ID
+    with pytest.raises(CreateFailed):
+        SynapseFS("SynapseFS Test Project/syn50557597")
+
+
+@pytest.mark.integration
+def test_that_a_rootless_synapsefs_can_open_a_random_file_by_id(synapse_fs):
+    with synapse_fs.open("syn50555279") as infile:
+        contents = infile.read()
+    assert contents == "foobar\n"
 
 
 # Not technically an integration test, but I'm reusing the same mark since it's slow

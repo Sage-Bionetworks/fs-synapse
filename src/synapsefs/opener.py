@@ -3,7 +3,7 @@ import os
 from fs.opener import Opener
 from fs.opener.parse import ParseResult
 
-from dcqc.filesystems.synapsefs import SynapseFS
+from synapsefs.synapsefs import SynapseFS
 
 
 class SynapseFSOpener(Opener):

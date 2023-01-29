@@ -1,6 +1,6 @@
 # Contributing
 
-Welcome to `dcqc` contributor's guide.
+Welcome to `fs-synapse` contributor's guide.
 
 This document focuses on getting any potential contributor familiarized with
 the development processes, but [other kinds of contributions] are also appreciated.
@@ -16,7 +16,7 @@ behavior guidelines.
 
 ## Issue Reports
 
-If you experience bugs or general issues with `dcqc`, please have a look
+If you experience bugs or general issues with `fs-synapse`, please have a look
 on the [issue tracker].
 If you don't see anything useful there, please feel free to fire an issue report.
 
@@ -34,17 +34,17 @@ you help us to identify the root cause of the issue.
 
 ## Documentation Improvements
 
-You can help improve `dcqc` docs by making them more readable and coherent, or
+You can help improve `fs-synapse` docs by making them more readable and coherent, or
 by adding missing information and correcting mistakes.
 
-`dcqc` documentation uses [Sphinx] as its main documentation compiler.
+`fs-synapse` documentation uses [Sphinx] as its main documentation compiler.
 This means that the docs are kept in the same repository as the project code, and
 that any documentation update is done in the same way was a code contribution.
 The documentation is written using [CommonMark] with [MyST] extensions.
 
 :::{tip}
    Please notice that the [GitHub web interface] provides a quick way of
-   propose changes in `dcqc`'s files. While this mechanism can
+   propose changes in `fs-synapse`'s files. While this mechanism can
    be tricky for normal code contributions, it works perfectly fine for
    contributing to the docs, and can be quite handy.
 
@@ -97,8 +97,8 @@ This often provides additional considerations and avoids unnecessary work.
 3. Clone this copy to your local disk:
 
    ```console
-   git clone git@github.com:Sage-Bionetworks-Workflows/py-dcqc.git
-   cd dcqc
+   git clone git@github.com:Sage-Bionetworks/fs-synapse.git
+   cd fs-synapse
    ```
 
 4. You should run:
@@ -116,7 +116,7 @@ This often provides additional considerations and avoids unnecessary work.
    pipenv run pre-commit install
    ```
 
-   `dcqc` comes with a lot of hooks configured to automatically help the
+   `fs-synapse` comes with a lot of hooks configured to automatically help the
    developer to check the code being written.
 
 ### Implement your changes
@@ -245,7 +245,7 @@ package:
 
 If you are part of the group of maintainers and have correct user permissions
 on [PyPI], the following steps can be used to release a new version for
-`dcqc`:
+`fs-synapse`:
 
 1. Make sure all unit tests are successful.
 2. Tag the current commit on the main branch with a release tag, e.g., `v1.2.3`.
@@ -291,5 +291,5 @@ on [PyPI], the following steps can be used to release a new version for
 [tox]: https://tox.readthedocs.io/en/stable/
 [virtual environment]: https://realpython.com/python-virtual-environments-a-primer/
 [virtualenv]: https://virtualenv.pypa.io/en/stable/
-[repository]: https://github.com/sage-bionetworks-workflows/py-dcqc
-[issue tracker]: https://github.com/sage-bionetworks-workflows/py-dcqc/issues
+[repository]: https://github.com/sage-bionetworks-workflows/py-fs-synapse
+[issue tracker]: https://github.com/sage-bionetworks-workflows/py-fs-synapse/issues

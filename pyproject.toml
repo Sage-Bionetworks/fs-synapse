@@ -8,11 +8,8 @@ build-backend = "setuptools.build_meta"
 # check out https://github.com/pypa/setuptools_scm
 version_scheme = "no-guess-dev"
 
-[tool.mypy]
-disable_error_code = "type-abstract"
-
 [[tool.mypy.overrides]]
-module = "dcqc"
+module = "synapsefs"
 disallow_untyped_calls = true
 disallow_untyped_defs = true
 disallow_incomplete_defs = true
@@ -21,10 +18,6 @@ check_untyped_defs = true
 [[tool.mypy.overrides]]
 module = "synapseclient.*"
 ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "dcqc.suites.suites"
-disable_error_code = "assignment"
 
 [tool.interrogate]
 ignore-init-method = true

@@ -33,7 +33,7 @@ from synapseclient.core.exceptions import SynapseFileNotFoundError, SynapseHTTPE
 from synapseclient.core.utils import iso_to_datetime
 from synapseclient.entity import Entity, File, Folder, Project, is_container
 
-from dcqc.filesystems.remote_file import RemoteFile
+from synapsefs.remote_file import RemoteFile
 
 RawInfo = Mapping[str, Mapping[str, object]]
 
