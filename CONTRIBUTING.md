@@ -97,7 +97,7 @@ This often provides additional considerations and avoids unnecessary work.
 3. Clone this copy to your local disk:
 
    ```console
-   git clone git@github.com:Sage-Bionetworks-Workflows/py-fs-synapse.git
+   git clone git@github.com:Sage-Bionetworks/fs-synapse.git
    cd fs-synapse
    ```
 
