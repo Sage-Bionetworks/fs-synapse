@@ -67,14 +67,16 @@ jobs:
         - macos-latest
         # TODO: Debug the Windows issues
         # - windows-latest
+    env:
+      OS: ${{ matrix.platform }}
+      PYTHON: ${{ matrix.python }}    
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python }}
-      - name: Retrieve pre-built distribution files
-        uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v3
         with: {name: python-distribution-files, path: dist/}
       - name: Install tox-gh plugin
         run: python -m pip install tox-gh>=1.2
@@ -85,8 +87,7 @@ jobs:
         env:
           SYNAPSE_AUTH_TOKEN: ${{ secrets.SYNAPSE_AUTH_TOKEN }}
         run: >-
-          pipx run --spec 'tox~=3.0' tox
-          --installpkg '${{ needs.prepare.outputs.wheel-path }}'
+          tox --installpkg '${{ needs.prepare.outputs.wheel-path }}'
           -- -rFEx --durations 10 --color yes -m "not integration"
       - name: Run tests (with integration tests)
         if: matrix.platform == 'ubuntu-latest' && matrix.python == '3.11'
