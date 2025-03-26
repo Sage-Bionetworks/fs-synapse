@@ -239,6 +239,15 @@ package:
    running `tox -- -k <NAME OF THE FALLING TEST> --pdb`).
    You can also setup breakpoints manually instead of using the `--pdb` option.
 
+#### The integration tests stop passing in github
+
+If a Synapse access token is not used for 180 days it will expire. As development in
+this library does not occur often, you may run into issues where the token used during
+the tests no longer work. In order to resolve this issue you will need to generate a 
+new access token. The `synapse-service-dpe-team` account is being used for this purpose
+as it has been given the required permissions in the prod instance of Synapse to the
+testing resources required to run the tests.
+
 ## Maintainer tasks
 
 ### Releases

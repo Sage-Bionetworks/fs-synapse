@@ -116,18 +116,15 @@ def test_that_a_rootless_synapsefs_can_open_a_random_file_by_id(synapse_fs):
     assert contents == "foobar\n"
 
 
-# Not technically an integration test, but I'm reusing the same mark since it's slow
 @pytest.mark.integration
-def test_that_staging_a_synapse_file_creates_a_copy(mocker):
-    mocked_synapse = mocker.patch("synapseclient.Synapse")
+def test_that_staging_a_synapse_file_creates_a_copy():
     synapse_fs = open_fs("syn://syn50545516")
     with TemporaryDirectory() as tmp_dir_name:
         tmp_dir_path = Path(tmp_dir_name)
         tmp_file_path = tmp_dir_path / "mocked.txt"
         with tmp_file_path.open("w") as tmp_file:
             tmp_file.write("foobar")
-        mocked_entity = mocker.PropertyMock(tmp_file_path)
-        mocked_synapse.get.return_value = mocked_entity
+
         target_path = tmp_dir_path / "test.txt"
         assert not target_path.exists()
         target_file = target_path.open("wb")
