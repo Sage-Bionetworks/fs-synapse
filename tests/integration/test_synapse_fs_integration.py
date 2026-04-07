@@ -13,7 +13,6 @@ from synapseclient.models import Folder
 
 from synapsefs import SynapseFS
 
-
 pytestmark = pytest.mark.integration
 
 
@@ -35,9 +34,7 @@ class TestInit:
         fs = SynapseFS("syn50545516", auth_token=auth_token)
         assert fs.root == "syn50545516"
 
-    def test_rooted_with_folder_id(
-        self, auth_token: str, test_folder: Folder
-    ) -> None:
+    def test_rooted_with_folder_id(self, auth_token: str, test_folder: Folder) -> None:
         """Verify that a folder Synapse ID can be used as root."""
         fs = SynapseFS(test_folder.id, auth_token=auth_token)
         assert fs.root == test_folder.id
@@ -50,9 +47,7 @@ class TestInit:
         new_fs = SynapseFS(f"{test_folder.id}/subdir", auth_token=auth_token)
         assert new_fs.root is not None
 
-    def test_error_when_root_is_a_file(
-        self, fs: SynapseFS, auth_token: str
-    ) -> None:
+    def test_error_when_root_is_a_file(self, fs: SynapseFS, auth_token: str) -> None:
         """Verify that using a file's Synapse ID as root raises ValueError."""
         fs.touch("file.txt")
         synapse_id = fs._path_to_synapse_id("file.txt")
@@ -169,9 +164,7 @@ class TestInfo:
         except (TypeError, ValueError):
             pytest.fail("info() should be JSON serializable")
 
-    def test_info_timestamps_are_numeric_or_none(
-        self, fs: SynapseFS
-    ) -> None:
+    def test_info_timestamps_are_numeric_or_none(self, fs: SynapseFS) -> None:
         """Verify that created/modified are None, int, or float."""
         fs.pipe_file("timed.txt", b"data")
         info = fs.info("timed.txt")
@@ -261,9 +254,7 @@ class TestMkdir:
         fs.mkdir("/")
         fs.mkdir("")
 
-    def test_mkdir_existing_directory_with_create_parents(
-        self, fs: SynapseFS
-    ) -> None:
+    def test_mkdir_existing_directory_with_create_parents(self, fs: SynapseFS) -> None:
         """
         Verify that mkdir on an existing directory does not raise when
           create_parents=True.
@@ -300,9 +291,7 @@ class TestMakedirs:
         fs.makedirs("single")
         assert fs.exists("single")
 
-    def test_makedirs_rootless_requires_synapse_id(
-        self, auth_token: str
-    ) -> None:
+    def test_makedirs_rootless_requires_synapse_id(self, auth_token: str) -> None:
         """
         Verify that makedirs in rootless mode raises ValueError without a Synapse ID.
         """
@@ -322,9 +311,7 @@ class TestOpen:
             data = f.read()
         assert data == b"hello world"
 
-    def test_open_exclusive_mode_raises_on_existing(
-        self, fs: SynapseFS
-    ) -> None:
+    def test_open_exclusive_mode_raises_on_existing(self, fs: SynapseFS) -> None:
         """
         Verify that exclusive mode ('x') raises FileExistsError for existing files.
         """
@@ -340,9 +327,7 @@ class TestOpen:
             data = f.read()
         assert data == b"exclusive"
 
-    def test_open_read_nonexistent_raises_file_not_found(
-        self, fs: SynapseFS
-    ) -> None:
+    def test_open_read_nonexistent_raises_file_not_found(self, fs: SynapseFS) -> None:
         """
         Verify that opening a nonexistent file for reading raises FileNotFoundError."""
         with pytest.raises(FileNotFoundError):
@@ -392,17 +377,13 @@ class TestRmFile:
         fs.rm_file("to_remove.txt")
         assert not fs.exists("to_remove.txt")
 
-    def test_rm_file_on_directory_raises_is_a_directory(
-        self, fs: SynapseFS
-    ) -> None:
+    def test_rm_file_on_directory_raises_is_a_directory(self, fs: SynapseFS) -> None:
         """Verify that rm_file raises IsADirectoryError when given a directory."""
         fs.mkdir("test_dir")
         with pytest.raises(IsADirectoryError):
             fs.rm_file("test_dir")
 
-    def test_rm_file_nonexistent_raises_file_not_found(
-        self, fs: SynapseFS
-    ) -> None:
+    def test_rm_file_nonexistent_raises_file_not_found(self, fs: SynapseFS) -> None:
         """Verify that rm_file raises FileNotFoundError for a nonexistent path."""
         with pytest.raises(FileNotFoundError):
             fs.rm_file("ghost.txt")
@@ -425,17 +406,13 @@ class TestRmdir:
         with pytest.raises(OSError):
             fs.rmdir("notempty")
 
-    def test_rmdir_on_file_raises_not_a_directory(
-        self, fs: SynapseFS
-    ) -> None:
+    def test_rmdir_on_file_raises_not_a_directory(self, fs: SynapseFS) -> None:
         """Verify that rmdir raises NotADirectoryError when given a file."""
         fs.touch("a_file.txt")
         with pytest.raises(NotADirectoryError):
             fs.rmdir("a_file.txt")
 
-    def test_rmdir_nonexistent_raises_file_not_found(
-        self, fs: SynapseFS
-    ) -> None:
+    def test_rmdir_nonexistent_raises_file_not_found(self, fs: SynapseFS) -> None:
         """Verify that rmdir raises FileNotFoundError for a nonexistent path."""
         with pytest.raises(FileNotFoundError):
             fs.rmdir("no_such_dir")
@@ -481,9 +458,7 @@ class TestRm:
         fs.rm("tree", recursive=True)
         assert not fs.exists("tree")
 
-    def test_rm_nonexistent_raises_file_not_found(
-        self, fs: SynapseFS
-    ) -> None:
+    def test_rm_nonexistent_raises_file_not_found(self, fs: SynapseFS) -> None:
         """Verify that rm raises FileNotFoundError for a nonexistent path."""
         with pytest.raises(FileNotFoundError):
             fs.rm("nonexistent")
@@ -538,9 +513,7 @@ class TestFsspecRegistration:
 class TestRootlessPathTraversal:
     """Tests for rootless SynapseFS path traversal."""
 
-    def test_path_with_multiple_synapse_ids(
-        self, rootless_fs: SynapseFS
-    ) -> None:
+    def test_path_with_multiple_synapse_ids(self, rootless_fs: SynapseFS) -> None:
         """Verify that a path with multiple Synapse IDs can be traversed."""
         info = rootless_fs.info("syn50545516/syn50557597")
         assert info["name"] == "TestSubDir"
@@ -577,9 +550,7 @@ class TestDoublePeriodPaths:
         id_via_dot_dot = fs._path_to_synapse_id("foo/bar/../bar/baz")
         assert id_direct == id_via_dot_dot
 
-    def test_double_period_after_file_resolves_to_parent(
-        self, fs: SynapseFS
-    ) -> None:
+    def test_double_period_after_file_resolves_to_parent(self, fs: SynapseFS) -> None:
         """Verify that foo/test.txt/.. resolves to the same entity as foo."""
         fs.mkdir("foo")
         fs.touch("foo/test.txt")
@@ -587,17 +558,13 @@ class TestDoublePeriodPaths:
         info_via_dot_dot = fs.info("foo/test.txt/..")
         assert info_parent["synapse_id"] == info_via_dot_dot["synapse_id"]
 
-    def test_init_with_double_period_after_folder(
-        self, auth_token: str
-    ) -> None:
+    def test_init_with_double_period_after_folder(self, auth_token: str) -> None:
         """Verify that SynapseFS('syn50557597/..') roots at the parent project."""
         fs = SynapseFS("syn50557597/..", auth_token=auth_token)
         info = fs.info(".")
         assert info["synapse_id"] == "syn50545516"
 
-    def test_init_with_double_period_after_file(
-        self, auth_token: str
-    ) -> None:
+    def test_init_with_double_period_after_file(self, auth_token: str) -> None:
         """Verify that SynapseFS('syn50555279/..') roots at the parent project."""
         fs = SynapseFS("syn50555279/..", auth_token=auth_token)
         info = fs.info(".")
@@ -625,9 +592,7 @@ class TestGetParentId:
 class TestPathToParentId:
     """Tests for SynapseFS._path_to_parent_id."""
 
-    def test_returns_parent_for_synapse_id(
-        self, rootless_fs: SynapseFS
-    ) -> None:
+    def test_returns_parent_for_synapse_id(self, rootless_fs: SynapseFS) -> None:
         """Verify that _path_to_parent_id returns the parent ID for a Synapse ID."""
         actual = rootless_fs._path_to_parent_id("syn50555279")
         assert actual == "syn50545516"

@@ -35,6 +35,7 @@ class TestClose:
         upload callback), so self.closed becomes True and the guard in
         close() prevents the callback from firing again.
         """
+
         def closing_callback(rf: RemoteFile) -> None:
             rf.raw.close()
 

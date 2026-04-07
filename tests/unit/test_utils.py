@@ -5,10 +5,7 @@ from pathlib import Path
 from tempfile import TemporaryFile
 
 import pytest
-from synapseclient.core.exceptions import (
-    SynapseFileNotFoundError,
-    SynapseHTTPError,
-)
+from synapseclient.core.exceptions import SynapseFileNotFoundError, SynapseHTTPError
 
 from synapsefs.remote_file import RemoteFile
 from synapsefs.synapsefs import SynapseFS, synapse_errors
@@ -171,9 +168,7 @@ class TestPathToSynapseId:
         """Verify that a path not starting with a Synapse ID raises ValueError."""
         fs = SynapseFS()
         with pytest.raises(ValueError):
-            fs._path_to_synapse_id(
-                "SynapseFS Test Project/syn50555279"
-            )
+            fs._path_to_synapse_id("SynapseFS Test Project/syn50555279")
 
 
 class TestSynapseErrors:
@@ -210,7 +205,5 @@ class TestRemoteFile:
     def test_close_without_on_close_callback(self) -> None:
         """Verify that a RemoteFile with on_close=None can be closed."""
         with TemporaryFile() as temp_file:
-            remote_file = RemoteFile(
-                temp_file, "w", on_close=None
-            )
+            remote_file = RemoteFile(temp_file, "w", on_close=None)
             remote_file.close()
