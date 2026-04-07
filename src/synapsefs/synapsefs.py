@@ -6,7 +6,7 @@ import threading
 from contextlib import contextmanager
 from pathlib import PurePosixPath
 from tempfile import NamedTemporaryFile, TemporaryDirectory, mkdtemp
-from typing import Any, Generator, Literal, overload
+from typing import Any, Generator, Literal, TypeAlias, overload
 
 from fsspec import AbstractFileSystem
 from synapseclient.api import get_children
@@ -29,7 +29,7 @@ from synapsefs.utils import (
     strip_mode,
 )
 
-SynapseEntity = File | Folder | Project
+SynapseEntity: TypeAlias = File | Folder | Project
 
 
 @contextmanager
@@ -412,7 +412,7 @@ class SynapseFS(AbstractFileSystem):  # type: ignore[misc]
 
     @overload
     def ls(
-        self, path: str, detail: Literal[True] = ..., **kwargs: Any
+        self, path: str, detail: Literal[True], **kwargs: Any
     ) -> list[dict[str, Any]]:
         ...
 

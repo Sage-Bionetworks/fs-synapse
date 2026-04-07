@@ -18,7 +18,7 @@ TEST_ROOT_PARENT = "syn50555278"
 
 
 @pytest.fixture(scope="session")
-def rootless_fs() -> Generator[SynapseFS]:
+def rootless_fs() -> Generator[SynapseFS, None, None]:
     """Return a rootless SynapseFS (no root, no explicit auth token)."""
     yield SynapseFS()
 
@@ -30,7 +30,7 @@ def fs(auth_token: str, test_folder: Folder) -> SynapseFS:
 
 
 @pytest.fixture(scope="session")
-def auth_token() -> str:
+def auth_token() -> str | None:
     """Return the Synapse auth token or skip."""
     token = os.environ.get("SYNAPSE_AUTH_TOKEN")
     if token is None:
