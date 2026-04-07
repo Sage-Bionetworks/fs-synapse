@@ -1,0 +1,66 @@
+"""Unit tests for SynapseFS class."""
+
+import pytest
+
+from synapsefs.synapsefs import SynapseFS
+
+
+class TestIsSynapseId:
+    """Tests for SynapseFS.is_synapse_id."""
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            pytest.param("syn123", id="standard"),
+            pytest.param("syn0", id="zero"),
+            pytest.param("syn999999999", id="large_number"),
+        ],
+    )
+    def test_valid(self, rootless_fs: SynapseFS, text: str) -> None:
+        """Verify that well-formed Synapse IDs are recognized."""
+        assert rootless_fs.is_synapse_id(text)
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            pytest.param("syn", id="prefix_only"),
+            pytest.param("SYN123", id="uppercase"),
+            pytest.param("123syn", id="digits_before_prefix"),
+            pytest.param("syn123abc", id="trailing_letters"),
+            pytest.param("", id="empty_string"),
+            pytest.param("synABC", id="letters_after_prefix"),
+        ],
+    )
+    def test_invalid(self, rootless_fs: SynapseFS, text: str) -> None:
+        """Verify that malformed strings are not recognized as Synapse IDs."""
+        assert not rootless_fs.is_synapse_id(text)
+
+
+class TestStripProtocol:
+    """Tests for SynapseFS._strip_protocol."""
+
+    @pytest.mark.parametrize(
+        ("path", "expected"),
+        [
+            pytest.param("syn://foo", "foo", id="protocol"),
+            pytest.param("syn://foo/", "foo", id="protocol_trailing_slash"),
+            pytest.param("/foo/", "foo", id="leading_and_trailing_slashes"),
+            pytest.param("foo", "foo", id="plain_path"),
+            pytest.param("", "", id="empty_string"),
+            pytest.param("syn://foo/bar/baz", "foo/bar/baz", id="nested_path"),
+            pytest.param("syn://syn123456", "syn123456", id="synapse_id"),
+        ],
+    )
+    def test_strip_protocol(self, path: str, expected: str) -> None:
+        """Verify that _strip_protocol normalizes paths correctly."""
+        assert SynapseFS._strip_protocol(path) == expected
+
+
+class TestRootlessInit:
+    """Tests for SynapseFS() without auth token."""
+
+    def test_no_root_creates_rootless_synapse_fs(self) -> None:
+        """Verify that omitting root creates a rootless SynapseFS with root=None."""
+        fs = SynapseFS()
+        assert isinstance(fs, SynapseFS)
+        assert fs.root is None

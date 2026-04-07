@@ -19,5 +19,9 @@ check_untyped_defs = true
 module = "synapseclient.*"
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = "fsspec.*"
+ignore_missing_imports = true
+
 [tool.interrogate]
 ignore-init-method = true
