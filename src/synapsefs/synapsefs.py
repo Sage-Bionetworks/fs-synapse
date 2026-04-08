@@ -345,6 +345,7 @@ class SynapseFS(AbstractFileSystem):  # type: ignore[misc]
         """
         path = self._strip_protocol(path)
         entity = self._path_to_entity(path)
+        print(entity)
 
         name = entity.name
         is_dir = isinstance(entity, (Folder, Project))
@@ -368,7 +369,7 @@ class SynapseFS(AbstractFileSystem):  # type: ignore[misc]
         info["synapse_id"] = entity.id
         info["synapse_parent_id"] = entity.parent_id
         info["synapse_etag"] = entity.etag
-        info["synapse_concrete_type"] = type(entity).__name__
+        info["synapse_entity_type"] = type(entity).__name__
 
         info["synapse_creator_id"] = int(entity.created_by)
         info["synapse_modifier_id"] = int(entity.modified_by)

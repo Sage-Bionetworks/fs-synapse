@@ -79,6 +79,7 @@ class TestInfo:
         assert info["name"] == "hello.txt"
         assert info["type"] == "file"
         assert info["size"] == 5
+        assert info["synapse_entity_type"] == "File"
 
     def test_info_for_directory(self, fs: SynapseFS) -> None:
         """Verify that info returns type 'directory' and size 0 for a folder."""
@@ -87,6 +88,7 @@ class TestInfo:
         assert info["name"] == "test_dir"
         assert info["type"] == "directory"
         assert info["size"] == 0
+        assert info["synapse_entity_type"] == "Folder"
 
     def test_info_for_root(self, fs: SynapseFS) -> None:
         """Verify that info on '/' returns the root directory metadata."""
@@ -101,7 +103,6 @@ class TestInfo:
         assert "synapse_id" in info
         assert "synapse_parent_id" in info
         assert "synapse_etag" in info
-        assert "synapse_concrete_type" in info
         assert "synapse_creator_id" in info
         assert "synapse_modifier_id" in info
         assert "created" in info
