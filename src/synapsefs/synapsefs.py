@@ -426,11 +426,13 @@ class SynapseFS(AbstractFileSystem):  # type: ignore[misc]
                 return a list of full paths.
 
         Returns:
-            List of paths (strings) or info dicts.
+            List of paths (strings) or info dicts. When detail is True,
+            each dict contains name, type, and size keys. Note that
+            fetching file sizes requires an additional API call per file
+            because the Synapse children listing does not include sizes.
 
         Raises:
             NotADirectoryError: If path is not a directory.
-            FileNotFoundError: If path does not exist.
         """
         path = self._strip_protocol(path)
         entity = self._path_to_entity(path)
@@ -455,7 +457,18 @@ class SynapseFS(AbstractFileSystem):  # type: ignore[misc]
                     "name": child_path,
                     "type": "directory" if is_dir else "file",
                 }
-                child_info["size"] = 0 if is_dir else None
+                if is_dir:
+                    child_info["size"] = 0
+                # TODO: https://sagebionetworks.jira.com/browse/DPE-1634
+                # Getting sizes for each file in the directory could be very slow,
+                #  but is the spec for this method.
+                else:
+                    file_entity = syn_get(
+                        child["id"],
+                        file_options=FileOptions(download_file=False),
+                        synapse_client=self.synapse,
+                    )
+                    child_info["size"] = file_entity.file_handle.content_size
                 result.append(child_info)
             return result
         else:
