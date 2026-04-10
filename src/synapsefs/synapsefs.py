@@ -548,7 +548,10 @@ class SynapseFS(AbstractFileSystem):  # type: ignore[misc]
             children = self._get_children(current_parent)
             child_match = [c for c in children if c["name"] == part]
             if child_match:
-                current_parent = child_match[0]["id"]
+                child = child_match[0]
+                if child["type"] == "org.sagebionetworks.repo.model.File":
+                    raise NotADirectoryError(f"{part} is not a directory")
+                current_parent = child["id"]
             else:
                 folder = Folder(name=part, parent_id=current_parent)
                 with synapse_errors(path):
@@ -736,11 +739,16 @@ class SynapseFS(AbstractFileSystem):  # type: ignore[misc]
             syn_delete(entity, synapse_client=self.synapse)
 
     def touch(self, path: str, truncate: bool = True, **kwargs: Any) -> None:
-        """Create an empty file or update timestamp.
+        """Create an empty file, or truncate an existing one.
+
+        If the file already exists and truncate is False, this is a no-op.
+        Unlike POSIX touch, this does not update the timestamp of an
+        existing file because Synapse has no lightweight timestamp-update API.
 
         Arguments:
             path: Path to the file.
             truncate: If True, truncate the file if it exists.
+                If False and the file exists, do nothing.
         """
         path = self._strip_protocol(path)
 
