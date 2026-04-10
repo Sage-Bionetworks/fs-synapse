@@ -353,10 +353,12 @@ class SynapseFS(AbstractFileSystem):  # type: ignore[misc]
             "type": "directory" if is_dir else "file",
         }
 
-        if not is_dir:
+        if is_dir:
+            info["size"] = 0
+        elif entity.file_handle is not None:
             info["size"] = entity.file_handle.content_size
         else:
-            info["size"] = 0
+            info["size"] = None
 
         created_on = iso_to_datetime(entity.created_on)
         modified_on = iso_to_datetime(entity.modified_on)
@@ -396,8 +398,9 @@ class SynapseFS(AbstractFileSystem):  # type: ignore[misc]
         info["synapse_version_number"] = None
 
         if not is_dir:
-            info["synapse_content_type"] = entity.file_handle.content_type
-            info["synapse_content_md5"] = entity.file_handle.content_md5
+            if entity.file_handle is not None:
+                info["synapse_content_type"] = entity.file_handle.content_type
+                info["synapse_content_md5"] = entity.file_handle.content_md5
             info["synapse_version_label"] = entity.version_label
             info["synapse_version_number"] = entity.version_number
 
@@ -468,7 +471,8 @@ class SynapseFS(AbstractFileSystem):  # type: ignore[misc]
                         file_options=FileOptions(download_file=False),
                         synapse_client=self.synapse,
                     )
-                    child_info["size"] = file_entity.file_handle.content_size
+                    fh = file_entity.file_handle
+                    child_info["size"] = fh.content_size if fh is not None else None
                 result.append(child_info)
             return result
         else:

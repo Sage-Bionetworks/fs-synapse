@@ -113,3 +113,15 @@ class TestPathToSynapseId:
         fs = SynapseFS()
         with pytest.raises(ValueError):
             fs._path_to_synapse_id("SynapseFS Test Project/syn50555279")
+
+    def test_rootless_root_path_raises_value_error(self) -> None:
+        """Verify that querying '/' on a rootless FS raises ValueError.
+
+        _strip_protocol turns '/' into '', and with no root there is no
+        Synapse ID to resolve, so _path_to_synapse_id should raise.
+        """
+        fs = SynapseFS()
+        stripped = fs._strip_protocol("/")
+        assert stripped == ""
+        with pytest.raises(ValueError, match="must be a Synapse ID"):
+            fs._path_to_synapse_id(stripped)
