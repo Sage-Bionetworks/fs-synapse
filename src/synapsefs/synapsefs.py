@@ -34,7 +34,7 @@ SynapseEntity: TypeAlias = File | Folder | Project
 
 @contextmanager
 def synapse_errors(path: str) -> Generator[None, None, None]:
-    """A context manager for mapping ``synapseclient`` errors to standard exceptions."""
+    """A context manager for mapping synapseclient errors to standard exceptions."""
     try:
         yield
     except SynapseFileNotFoundError:
@@ -84,7 +84,7 @@ class SynapseFS(AbstractFileSystem):  # type: ignore[misc]
             auth_token: Synapse personal access token.
                 Defaults to None.
             synapse_args: Dictionary of arguments to pass to
-                the ``Synapse`` class. Defaults to None.
+                the Synapse class. Defaults to None.
         """
         super().__init__(**kwargs)
         self.auth_token = auth_token
@@ -184,7 +184,7 @@ class SynapseFS(AbstractFileSystem):  # type: ignore[misc]
         Raises:
             ValueError: If the path does not start with a
                 Synapse ID while SynapseFS is rootless.
-            FileNotFoundError: If the ``path`` does not
+            FileNotFoundError: If the path does not
                 resolve to existing entities.
         """
         original_path = path
@@ -245,8 +245,8 @@ class SynapseFS(AbstractFileSystem):  # type: ignore[misc]
             The associated Synapse entity
 
         Raises:
-            FileNotFoundError: If ``synapse_id`` does not exist.
-            ValueError: If ``synapse_id`` does not correspond
+            FileNotFoundError: If synapse_id does not exist.
+            ValueError: If synapse_id does not correspond
                  to a supported entity type.
         """
         with synapse_errors(synapse_id):
@@ -341,17 +341,15 @@ class SynapseFS(AbstractFileSystem):  # type: ignore[misc]
             Dictionary with resource information.
 
         Raises:
-            FileNotFoundError: If ``path`` does not exist.
+            FileNotFoundError: If path does not exist.
         """
         path = self._strip_protocol(path)
         entity = self._path_to_entity(path)
-        print(entity)
 
-        name = entity.name
         is_dir = isinstance(entity, (Folder, Project))
 
         info: dict[str, Any] = {
-            "name": name,
+            "name": path,
             "type": "directory" if is_dir else "file",
         }
 
@@ -408,17 +406,17 @@ class SynapseFS(AbstractFileSystem):  # type: ignore[misc]
         return info
 
     @overload
-    def ls(self, path: str, detail: Literal[False] = ..., **kwargs: Any) -> list[str]:
-        ...
-
-    @overload
     def ls(
-        self, path: str, detail: Literal[True], **kwargs: Any
+        self, path: str, detail: Literal[True] = ..., **kwargs: Any
     ) -> list[dict[str, Any]]:
         ...
 
+    @overload
+    def ls(self, path: str, detail: Literal[False], **kwargs: Any) -> list[str]:
+        ...
+
     def ls(
-        self, path: str, detail: bool = False, **kwargs: Any
+        self, path: str, detail: bool = True, **kwargs: Any
     ) -> list[str] | list[dict[str, Any]]:
         """Get a list of the resources in a directory.
 
@@ -431,8 +429,8 @@ class SynapseFS(AbstractFileSystem):  # type: ignore[misc]
             List of paths (strings) or info dicts.
 
         Raises:
-            NotADirectoryError: If ``path`` is not a directory.
-            FileNotFoundError: If ``path`` does not exist.
+            NotADirectoryError: If path is not a directory.
+            FileNotFoundError: If path does not exist.
         """
         path = self._strip_protocol(path)
         entity = self._path_to_entity(path)
@@ -551,11 +549,11 @@ class SynapseFS(AbstractFileSystem):  # type: ignore[misc]
             A file-like object.
 
         Raises:
-            IsADirectoryError: If ``path`` exists and is a directory.
-            FileExistsError: If the ``path`` exists and
-                *exclusive mode* is specified (``x`` in the mode).
-            FileNotFoundError: If ``path`` does not exist and
-                ``mode`` does not imply creating the file.
+            IsADirectoryError: If path exists and is a directory.
+            FileExistsError: If the path exists and
+                *exclusive mode* is specified (x in the mode).
+            FileNotFoundError: If path does not exist and
+                mode does not imply creating the file.
         """
         path = self._strip_protocol(path)
 

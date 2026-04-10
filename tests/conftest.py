@@ -18,7 +18,7 @@ TEST_ROOT_PARENT = "syn50555278"
 
 
 @pytest.fixture(scope="session")
-def rootless_fs() -> Generator[SynapseFS, None, None]:
+def rootless_fs(auth_token: str) -> Generator[SynapseFS, None, None]:
     """Return a rootless SynapseFS (no root, no explicit auth token)."""
     yield SynapseFS()
 
