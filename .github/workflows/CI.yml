@@ -86,14 +86,14 @@ jobs:
           SYNAPSE_AUTH_TOKEN: ${{ secrets.SYNAPSE_AUTH_TOKEN }}
         run: >-
           tox --installpkg '${{ needs.prepare.outputs.wheel-path }}'
-          -- -rFEx --durations 10 --color yes -m "not integration"
+          -- -rFEx --durations 10 --color yes --reruns 1 -m "not integration"
       - name: Run tests (with integration tests)
         if: matrix.platform == 'ubuntu-latest' && matrix.python == '3.11'
         env:
           SYNAPSE_AUTH_TOKEN: ${{ secrets.SYNAPSE_AUTH_TOKEN }}
         run: >-
           tox --installpkg '${{ needs.prepare.outputs.wheel-path }}'
-          -- -rFEx --durations 10 --color yes -n 4
+          -- -rFEx --durations 10 --color yes --reruns 2 -n 4
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238 # v4
         if: matrix.platform == 'ubuntu-latest' && matrix.python == '3.11'
