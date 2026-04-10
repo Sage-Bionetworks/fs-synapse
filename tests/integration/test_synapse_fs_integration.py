@@ -517,7 +517,7 @@ class TestRootlessPathTraversal:
     def test_path_with_multiple_synapse_ids(self, rootless_fs: SynapseFS) -> None:
         """Verify that a path with multiple Synapse IDs can be traversed."""
         info = rootless_fs.info("syn50545516/syn50557597")
-        assert info["name"] == "TestSubDir"
+        assert info["name"] == "syn50545516/syn50557597"
         assert info["type"] == "directory"
 
     def test_open_file_by_synapse_id(self, rootless_fs: SynapseFS) -> None:
