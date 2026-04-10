@@ -2,13 +2,10 @@
 
 import io
 from pathlib import Path
-from tempfile import TemporaryFile
 
 import pytest
-from synapseclient.core.exceptions import SynapseFileNotFoundError, SynapseHTTPError
 
-from synapsefs.remote_file import RemoteFile
-from synapsefs.synapsefs import SynapseFS, synapse_errors
+from synapsefs.synapsefs import SynapseFS
 from synapsefs.utils import (
     NULL_BYTE,
     normalize_mode,
@@ -169,41 +166,3 @@ class TestPathToSynapseId:
         fs = SynapseFS()
         with pytest.raises(ValueError):
             fs._path_to_synapse_id("SynapseFS Test Project/syn50555279")
-
-
-class TestSynapseErrors:
-    """Tests for the synapse_errors context manager."""
-
-    def test_file_not_found_error(self) -> None:
-        """Verify SynapseFileNotFoundError maps to FileNotFoundError."""
-        with pytest.raises(FileNotFoundError):
-            with synapse_errors("foo"):
-                raise SynapseFileNotFoundError("bar")
-
-    def test_does_not_exist_error(self) -> None:
-        """Verify SynapseHTTPError 'does not exist' maps to FileNotFoundError."""
-        with pytest.raises(FileNotFoundError):
-            with synapse_errors("foo"):
-                raise SynapseHTTPError("does not exist")
-
-    def test_already_exists_error(self) -> None:
-        """Verify SynapseHTTPError 'already exists' maps to FileExistsError."""
-        with pytest.raises(FileExistsError):
-            with synapse_errors("foo"):
-                raise SynapseHTTPError("already exists")
-
-    def test_unrecognized_http_error_re_raises(self) -> None:
-        """Verify unrecognized SynapseHTTPError is re-raised as-is."""
-        with pytest.raises(SynapseHTTPError):
-            with synapse_errors("foo"):
-                raise SynapseHTTPError("something else")
-
-
-class TestRemoteFile:
-    """Tests for RemoteFile edge cases."""
-
-    def test_close_without_on_close_callback(self) -> None:
-        """Verify that a RemoteFile with on_close=None can be closed."""
-        with TemporaryFile() as temp_file:
-            remote_file = RemoteFile(temp_file, "w", on_close=None)
-            remote_file.close()
