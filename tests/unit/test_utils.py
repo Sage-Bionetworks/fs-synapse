@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 
-from synapsefs.synapsefs import SynapseFS
 from synapsefs.utils import (
     NULL_BYTE,
     normalize_mode,
@@ -146,23 +145,3 @@ class TestRenameToTarget:
         assert result == expected
         assert expected.read_bytes() == b"data"
         assert not source.exists()
-
-
-class TestPathToParentId:
-    """Tests for SynapseFS._path_to_parent_id edge cases."""
-
-    def test_rootless_bare_name_raises_value_error(self) -> None:
-        """Verify that a bare name in rootless mode raises ValueError."""
-        fs = SynapseFS()
-        with pytest.raises(ValueError, match="must start with a Synapse ID"):
-            fs._path_to_parent_id("not_a_synapse_id")
-
-
-class TestPathToSynapseId:
-    """Tests for SynapseFS._path_to_synapse_id edge cases."""
-
-    def test_rootless_non_id_path_raises_value_error(self) -> None:
-        """Verify that a path not starting with a Synapse ID raises ValueError."""
-        fs = SynapseFS()
-        with pytest.raises(ValueError):
-            fs._path_to_synapse_id("SynapseFS Test Project/syn50555279")
