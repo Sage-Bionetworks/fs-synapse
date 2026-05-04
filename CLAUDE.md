@@ -1,4 +1,4 @@
-<!-- Last reviewed: 2026-04 -->
+<!-- Last reviewed: 2026-05 -->
 
 ## Project
 
@@ -9,8 +9,8 @@ fsspec adapter for Synapse — exposes Synapse files, folders, and projects thro
 - Python >=3.11, <3.15 (CI tests 3.11–3.14 on ubuntu + macos)
 - `fsspec>=2026.0.0`
 - `synapseclient>=4.10.0`
-- pytest ~9.0, pytest-xdist, pytest-mock, pytest-cov, hypothesis, nbmake
-- tox ~3.0
+- pytest ~9.0, pytest-xdist, pytest-mock, pytest-cov, pytest-rerunfailures, hypothesis, nbmake
+- tox >=4.2
 - pre-commit: black, isort (profile=black), flake8 (max-line-length=88), mypy (strict on `synapsefs`), autoflake, interrogate
 
 ## Commands
@@ -63,13 +63,12 @@ Source layout: `src/synapsefs/` with entry point registered as `fsspec.specs` (`
 ## Testing
 
 - **Markers:** `@pytest.mark.integration` for tests requiring live Synapse access. Non-integration tests run without network.
-- **Auth:** Integration tests require `SYNAPSE_AUTH_TOKEN` env var. CI runs integration tests only on ubuntu-latest + Python 3.11.
+- **Auth:** Integration tests require `SYNAPSE_AUTH_TOKEN` env var. CI runs integration tests only on ubuntu-latest + Python 3.11. When the token is unset, a `pytest_collection_modifyitems` hook in `tests/conftest.py` auto-skips any test whose `item.keywords` contain `"integration"` — i.e. anything carrying the `@pytest.mark.integration` marker (set per-module via `pytestmark` in `tests/integration/test_synapse_fs_integration.py`), plus anything whose class/module path matches that string. Gating happens at collection time rather than via fixture chains, so new integration tests skip correctly without needing to depend on the `auth_token` fixture.
 - **Concurrency:** Integration tests use `pytest-xdist -n 4`. Thread-local Synapse clients make this safe.
 - **Test isolation:** Each integration test run creates a session-level root folder under `syn50555278`, with per-test subfolders cleaned up via finalizers.
-- **Test structure:** `tests/unit_tests.py` (no network), `tests/integration_tests.py` (requires auth). `demos/` (Jupyter notebook tested via `nbmake`).
+- **Test structure:** `tests/unit/` (no network: `test_remote_file.py`, `test_synapse_fs_unit.py`, `test_utils.py`), `tests/integration/test_synapse_fs_integration.py` (requires auth), `tests/conftest.py` (shared fixtures).
 
 ## Related Systems
 
-- **py-orca** / **orca-recipes** / **py-dcqc** — downstream consumers of this package
 - **synapseclient** — the underlying Synapse Python client (`synapseclient.models`, `synapseclient.operations`); imports exempt from mypy `ignore_missing_imports`
 - **fsspec** — the filesystem abstraction layer this package builds on (`AbstractFileSystem`); imports exempt from mypy `ignore_missing_imports`

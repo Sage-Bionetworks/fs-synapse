@@ -1,5 +1,6 @@
 """Unit tests for SynapseFS class."""
 
+import fsspec
 import pytest
 from synapseclient.core.exceptions import SynapseFileNotFoundError, SynapseHTTPError
 
@@ -125,3 +126,13 @@ class TestPathToSynapseId:
         assert stripped == ""
         with pytest.raises(ValueError, match="must be a Synapse ID"):
             fs._path_to_synapse_id(stripped)
+
+
+class TestFsspecRegistration:
+    """Tests for fsspec protocol registration."""
+
+    def test_fsspec_filesystem_creates_synapse_fs(self) -> None:
+        """Verify that fsspec.filesystem('syn') returns a SynapseFS instance."""
+        fs = fsspec.filesystem("syn")
+        assert isinstance(fs, SynapseFS)
+        assert fs.root is None

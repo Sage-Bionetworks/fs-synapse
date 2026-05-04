@@ -7,7 +7,6 @@ import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-import fsspec
 import pytest
 from synapseclient.models import Folder
 
@@ -263,6 +262,24 @@ class TestMkdir:
         fs.mkdir("exist_dir")
         fs.mkdir("exist_dir", create_parents=True)
 
+    def test_mkdir_existing_directory_with_exist_ok(self, fs: SynapseFS) -> None:
+        """
+        Verify that mkdir on an existing directory does not raise when
+          exist_ok=True and create_parents=False.
+        """
+        fs.mkdir("exist_ok_dir")
+        fs.mkdir("exist_ok_dir", create_parents=False, exist_ok=True)
+        assert fs.exists("exist_ok_dir")
+
+    def test_mkdir_existing_directory_raises_without_flags(self, fs: SynapseFS) -> None:
+        """
+        Verify that mkdir on an existing directory raises FileExistsError when
+          both create_parents and exist_ok are False.
+        """
+        fs.mkdir("already_there")
+        with pytest.raises(FileExistsError):
+            fs.mkdir("already_there", create_parents=False, exist_ok=False)
+
 
 class TestMakedirs:
     """Tests for SynapseFS.makedirs."""
@@ -499,16 +516,6 @@ class TestTouch:
         fs.touch("typed.txt")
         info = fs.info("typed.txt")
         assert info["type"] == "file"
-
-
-class TestFsspecRegistration:
-    """Tests for fsspec protocol registration."""
-
-    def test_fsspec_filesystem_creates_synapse_fs(self) -> None:
-        """Verify that fsspec.filesystem('syn') returns a SynapseFS instance."""
-        fs = fsspec.filesystem("syn")
-        assert isinstance(fs, SynapseFS)
-        assert fs.root is None
 
 
 class TestRootlessPathTraversal:

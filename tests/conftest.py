@@ -17,8 +17,22 @@ from synapsefs import SynapseFS
 TEST_ROOT_PARENT = "syn50555278"
 
 
+def pytest_collection_modifyitems(
+    config: pytest.Config, items: list[pytest.Item]
+) -> None:
+    """Skip tests marked 'integration' when SYNAPSE_AUTH_TOKEN is unset."""
+    if os.environ.get("SYNAPSE_AUTH_TOKEN"):
+        return
+    skip_integration = pytest.mark.skip(
+        reason="'SYNAPSE_AUTH_TOKEN' not set in environment."
+    )
+    for item in items:
+        if "integration" in item.keywords:
+            item.add_marker(skip_integration)
+
+
 @pytest.fixture(scope="session")
-def rootless_fs(auth_token: str) -> Generator[SynapseFS, None, None]:
+def rootless_fs() -> Generator[SynapseFS, None, None]:
     """Return a rootless SynapseFS (no root, no explicit auth token)."""
     yield SynapseFS()
 

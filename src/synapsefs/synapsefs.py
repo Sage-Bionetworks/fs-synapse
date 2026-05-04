@@ -614,16 +614,18 @@ class SynapseFS(AbstractFileSystem):  # type: ignore[misc]
 
         def on_close(remote_file: RemoteFile) -> None:
             """Called when the file closes, to upload data."""
-            if creating or writing:
-                pad_empty_file(remote_file)
-            remote_file.raw.close()
-            if creating or writing:
-                parent = self._path_to_parent_id(path)
-                new_file_path = rename_to_target(remote_file.raw.name, file_name)
-                with synapse_errors(path):
-                    file = File(path=str(new_file_path), parent_id=parent)
-                    file = syn_store(file, synapse_client=self.synapse)
-            temp_dir.cleanup()
+            try:
+                if creating or writing:
+                    pad_empty_file(remote_file)
+                remote_file.raw.close()
+                if creating or writing:
+                    parent = self._path_to_parent_id(path)
+                    new_file_path = rename_to_target(remote_file.raw.name, file_name)
+                    with synapse_errors(path):
+                        file = File(path=str(new_file_path), parent_id=parent)
+                        file = syn_store(file, synapse_client=self.synapse)
+            finally:
+                temp_dir.cleanup()
 
         # Determine platform mode for the underlying file
         platform_mode = normalize_mode(mode)
@@ -762,4 +764,5 @@ class SynapseFS(AbstractFileSystem):  # type: ignore[misc]
             return
 
         # Write empty content (will become null byte due to Synapse restriction)
-        self._open(path, "wb").close()
+        with self._open(path, "wb"):
+            pass

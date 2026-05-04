@@ -29,11 +29,20 @@ class TestClose:
             rf.close()
 
     def test_idempotent(self) -> None:
-        """A second close() is a no-op once the underlying file is closed.
+        """Calling close() a second time does not fire the callback again.
 
-        The callback closes the underlying file (mimicking a real Synapse
-        upload callback), so self.closed becomes True and the guard in
-        close() prevents the callback from firing again.
+        Without this guarantee, a double close would trigger a second
+        Synapse upload in production (the real on_close runs syn_store).
+        Double-close happens naturally when callers use the file as a
+        context manager and also call close() explicitly, so the guard
+        must hold even when the second call is unintentional.
+
+        Setup mirrors the production callback: closing_callback closes
+        the underlying file just like the real on_close does after
+        uploading. Once the first close() runs, self.closed becomes True,
+        and the guard inside RemoteFile.close() must short-circuit the
+        second call before it reaches the callback. The assertion
+        callback.assert_called_once() is what proves the guard held.
         """
 
         def closing_callback(rf: RemoteFile) -> None:
