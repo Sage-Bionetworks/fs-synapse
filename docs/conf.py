@@ -113,7 +113,7 @@ master_doc = "index"
 
 # General information about the project.
 project = "fs-synapse"
-copyright = "2022-2026, Bruno Grande"
+copyright = "2022-2026, Sage Bionetworks"
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
