@@ -254,31 +254,35 @@ class TestMkdir:
         fs.mkdir("/")
         fs.mkdir("")
 
-    def test_mkdir_existing_directory_with_create_parents(self, fs: SynapseFS) -> None:
-        """
-        Verify that mkdir on an existing directory does not raise when
-          create_parents=True.
-        """
-        fs.mkdir("exist_dir")
-        fs.mkdir("exist_dir", create_parents=True)
-
-    def test_mkdir_existing_directory_with_exist_ok(self, fs: SynapseFS) -> None:
-        """
-        Verify that mkdir on an existing directory does not raise when
-          exist_ok=True and create_parents=False.
-        """
-        fs.mkdir("exist_ok_dir")
-        fs.mkdir("exist_ok_dir", create_parents=False, exist_ok=True)
-        assert fs.exists("exist_ok_dir")
-
-    def test_mkdir_existing_directory_raises_without_flags(self, fs: SynapseFS) -> None:
-        """
-        Verify that mkdir on an existing directory raises FileExistsError when
-          both create_parents and exist_ok are False.
-        """
+    def test_mkdir_existing_directory_raises(self, fs: SynapseFS) -> None:
+        """Verify that mkdir on an existing directory always raises FileExistsError."""
         fs.mkdir("already_there")
         with pytest.raises(FileExistsError):
-            fs.mkdir("already_there", create_parents=False, exist_ok=False)
+            fs.mkdir("already_there")
+        with pytest.raises(FileExistsError):
+            fs.mkdir("already_there", create_parents=True)
+        with pytest.raises(FileExistsError):
+            fs.mkdir("already_there", create_parents=False)
+
+    def test_mkdir_create_parents_creates_intermediates(self, fs: SynapseFS) -> None:
+        """Verify that mkdir creates missing parent directories when create_parents."""
+        fs.mkdir("a/b/c", create_parents=True)
+        assert fs.exists("a")
+        assert fs.exists("a/b")
+        assert fs.exists("a/b/c")
+
+    def test_mkdir_create_parents_false_raises_when_parent_missing(
+        self, fs: SynapseFS
+    ) -> None:
+        """Verify that mkdir raises FileNotFoundError when parent missing."""
+        with pytest.raises(FileNotFoundError):
+            fs.mkdir("missing_parent/leaf", create_parents=False)
+
+    def test_mkdir_path_occupied_by_file_raises(self, fs: SynapseFS) -> None:
+        """Verify that mkdir raises FileExistsError when a file occupies the path."""
+        fs.touch("blocker.txt")
+        with pytest.raises(FileExistsError):
+            fs.mkdir("blocker.txt")
 
 
 class TestMakedirs:
@@ -316,6 +320,26 @@ class TestMakedirs:
         rootless_fs = SynapseFS(auth_token=auth_token)
         with pytest.raises(ValueError):
             rootless_fs.makedirs("not_a_synapse_id/subdir")
+
+    def test_makedirs_existing_leaf_raises_without_exist_ok(
+        self, fs: SynapseFS
+    ) -> None:
+        """Verify that makedirs raises FileExistsError when the leaf exists."""
+        fs.mkdir("leaf_already_there")
+        with pytest.raises(FileExistsError):
+            fs.makedirs("leaf_already_there")
+
+    def test_makedirs_existing_leaf_ok_with_exist_ok(self, fs: SynapseFS) -> None:
+        """Verify that makedirs tolerates an existing leaf when exist_ok=True."""
+        fs.mkdir("leaf_ok")
+        fs.makedirs("leaf_ok", exist_ok=True)
+        assert fs.exists("leaf_ok")
+
+    def test_makedirs_file_in_path_raises_not_a_directory(self, fs: SynapseFS) -> None:
+        """Verify that makedirs raises NotADirectoryError on a file in the path."""
+        fs.touch("blocker.txt")
+        with pytest.raises(NotADirectoryError):
+            fs.makedirs("blocker.txt/below")
 
 
 class TestOpen:

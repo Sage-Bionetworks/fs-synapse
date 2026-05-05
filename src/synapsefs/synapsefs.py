@@ -485,20 +485,19 @@ class SynapseFS(AbstractFileSystem):  # type: ignore[misc]
         self,
         path: str,
         create_parents: bool = True,
-        exist_ok: bool = False,
         **kwargs: Any,
     ) -> None:
         """Make a directory.
 
         Arguments:
             path: Path to directory from root.
-            create_parents: If True, create parent directories as needed.
-            exist_ok: If True, do not raise an error if the directory
-                already exists.
+            create_parents: If True, create any missing parent directories.
+                If False, the parent directory must already exist.
 
         Raises:
-            FileExistsError: If the path already exists and exist_ok is False.
-            FileNotFoundError: If the path is not found.
+            FileExistsError: If the directory already exists.
+            FileNotFoundError: If create_parents is False and the parent
+                directory does not exist.
         """
         path = self._strip_protocol(path)
 
@@ -507,13 +506,14 @@ class SynapseFS(AbstractFileSystem):  # type: ignore[misc]
 
         posix_path = PurePosixPath(path)
         folder_name = str(posix_path.name)
-        parent = self._path_to_parent_id(path)
+        parent_path = str(posix_path.parent)
 
-        folder = Folder(
-            name=folder_name,
-            parent_id=parent,
-            create_or_update=exist_ok or create_parents,
-        )
+        if create_parents and parent_path not in ("", "."):
+            parent_id = self._makedirs(parent_path, exist_ok=True)
+        else:
+            parent_id = self._path_to_parent_id(path)
+
+        folder = Folder(name=folder_name, parent_id=parent_id, create_or_update=False)
         with synapse_errors(path):
             syn_store(folder, synapse_client=self.synapse)
 
@@ -522,14 +522,29 @@ class SynapseFS(AbstractFileSystem):  # type: ignore[misc]
 
         Arguments:
             path: Path to directory from root.
-            exist_ok: If True, do not raise an error if the directory
+            exist_ok: If True, do not raise an error if the leaf directory
+                already exists. Existing intermediate directories are
+                always tolerated.
+
+        Raises:
+            FileExistsError: If exist_ok is False and the leaf directory
                 already exists.
+            NotADirectoryError: If any path component is an existing file.
+            ValueError: If rootless and the path does not start with a
+                Synapse ID.
         """
         path = self._strip_protocol(path)
 
         if path == "":
             return
 
+        self._makedirs(path, exist_ok=exist_ok)
+
+    def _makedirs(self, path: str, exist_ok: bool = False) -> str:
+        """Internal makedirs that returns the leaf's Synapse ID.
+
+        Caller must ensure path is non-empty and already protocol-stripped.
+        """
         parts = path.strip("/").split("/")
 
         # Determine the starting entity
@@ -543,20 +558,25 @@ class SynapseFS(AbstractFileSystem):  # type: ignore[misc]
             message = f"Path ({path}) must start with a Synapse ID when rootless."
             raise ValueError(message)
 
-        for part in parts[start_idx:]:
-            # Check if the child already exists
+        remaining = parts[start_idx:]
+        for i, part in enumerate(remaining):
+            is_leaf = i == len(remaining) - 1
             children = self._get_children(current_parent)
             child_match = [c for c in children if c["name"] == part]
             if child_match:
                 child = child_match[0]
                 if child["type"] == "org.sagebionetworks.repo.model.File":
                     raise NotADirectoryError(f"{part} is not a directory")
+                if is_leaf and not exist_ok:
+                    raise FileExistsError(path)
                 current_parent = child["id"]
             else:
                 folder = Folder(name=part, parent_id=current_parent)
                 with synapse_errors(path):
                     folder = syn_store(folder, synapse_client=self.synapse)
                 current_parent = folder.id
+
+        return current_parent
 
     def _open(self, path: str, mode: str = "rb", **kwargs: Any) -> RemoteFile:
         """Open a binary file-like object.
