@@ -26,9 +26,9 @@ jobs:
       wheel-path: ${{ steps.distribution-paths.outputs.wheel }}
       tarball-path: ${{ steps.distribution-paths.outputs.tarball }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with: {fetch-depth: 0}  # deep clone for setuptools-scm
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with: {python-version: "3.11"}
       - name: Run static analysis and format checkers
         run: pipx run pre-commit run --all-files --show-diff-on-failure
@@ -50,19 +50,16 @@ jobs:
           name: python-distribution-files
           path: dist/
           retention-days: 1
-      - name: Keepalive Workflow
-        uses: gautamkrishnar/keepalive-workflow@1.1.0
-        with:
-          time_elapsed: 44
-          gh_token: ${{ secrets.GITHUB_TOKEN }}
 
   test:
     needs: prepare
     strategy:
       matrix:
         python:
-        - "3.9"  # oldest Python that is supported
-        - "3.11"  # newest Python that is stable
+        - "3.11"
+        - "3.12"
+        - "3.13"
+        - "3.14"
         platform:
         - ubuntu-latest
         - macos-latest
@@ -73,8 +70,8 @@ jobs:
       PYTHON: ${{ matrix.python }}
     runs-on: ${{ matrix.platform }}
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
       - uses: actions/download-artifact@v4
@@ -89,16 +86,16 @@ jobs:
           SYNAPSE_AUTH_TOKEN: ${{ secrets.SYNAPSE_AUTH_TOKEN }}
         run: >-
           tox --installpkg '${{ needs.prepare.outputs.wheel-path }}'
-          -- -rFEx --durations 10 --color yes -m "not integration"
+          -- -rFEx --durations 10 --color yes --reruns 1 -m "not integration"
       - name: Run tests (with integration tests)
         if: matrix.platform == 'ubuntu-latest' && matrix.python == '3.11'
         env:
           SYNAPSE_AUTH_TOKEN: ${{ secrets.SYNAPSE_AUTH_TOKEN }}
         run: >-
           tox --installpkg '${{ needs.prepare.outputs.wheel-path }}'
-          -- -rFEx --durations 10 --color yes -n 4
+          -- -rFEx --durations 10 --color yes --reruns 2 -n 4
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238 # v4
         if: matrix.platform == 'ubuntu-latest' && matrix.python == '3.11'
         with:
           files: coverage.xml
@@ -112,8 +109,8 @@ jobs:
     if: ${{ github.event_name == 'push' && contains(github.ref, 'refs/tags/') }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with: {python-version: "3.11"}
       - uses: actions/download-artifact@v4
         with: {name: python-distribution-files, path: dist/}
@@ -129,18 +126,18 @@ jobs:
     if: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with: {name: python-distribution-files, path: dist/}
-      - uses: docker/setup-qemu-action@v2
-      - uses: docker/setup-buildx-action@v2
-      - uses: docker/login-action@v2
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - id: meta
-        uses: docker/metadata-action@v4
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
           images: |
             ghcr.io/${{ github.repository }}
@@ -151,7 +148,7 @@ jobs:
             type=ref,event=branch
             type=sha
       - name: Publish Python Package to Docker Hub and GHCR
-        uses: docker/build-push-action@v3
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           platforms: linux/amd64,linux/arm64
           context: .

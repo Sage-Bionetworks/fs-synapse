@@ -113,7 +113,7 @@ master_doc = "index"
 
 # General information about the project.
 project = "fs-synapse"
-copyright = "2022, Bruno Grande"
+copyright = "2022-2026, Sage Bionetworks"
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
@@ -303,7 +303,7 @@ intersphinx_mapping = {
     "scipy": ("https://docs.scipy.org/doc/scipy/reference", None),
     "setuptools": ("https://setuptools.pypa.io/en/stable/", None),
     "pyscaffold": ("https://pyscaffold.org/en/stable", None),
-    "pyfilesystem": ("https://docs.pyfilesystem.org/en/stable/", None),
+    "fsspec": ("https://filesystem-spec.readthedocs.io/en/stable/", None),
 }
 
 print(f"loading configurations for {project} {version} ...", file=sys.stderr)

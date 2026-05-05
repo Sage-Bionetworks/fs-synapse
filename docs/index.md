@@ -1,6 +1,6 @@
 # fs-synapse
 
-A Synapse implementation of the [PyFileSystem2](http://docs.pyfilesystem.org/) interface.
+A Synapse implementation of the [fsspec](https://filesystem-spec.readthedocs.io/) interface.
 
 
 ## Note

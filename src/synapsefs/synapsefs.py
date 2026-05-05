@@ -2,96 +2,89 @@ from __future__ import annotations
 
 import os
 import re
-import shutil
 import threading
-from collections.abc import Collection, Mapping
 from contextlib import contextmanager
-from pathlib import Path, PurePosixPath
+from pathlib import PurePosixPath
 from tempfile import NamedTemporaryFile, TemporaryDirectory, mkdtemp
-from typing import Any, BinaryIO, Generator, Optional, Type
+from typing import Any, Generator, Literal, TypeAlias, overload
 
-from fs import ResourceType
-from fs.base import FS
-from fs.errors import (
-    CreateFailed,
-    DirectoryExists,
-    DirectoryExpected,
-    DirectoryNotEmpty,
-    FileExists,
-    FileExpected,
-    RemoveRootError,
-    ResourceInvalid,
-    ResourceNotFound,
-)
-from fs.info import Info
-from fs.mode import Mode
-from fs.permissions import Permissions
-from fs.subfs import SubFS
-from fs.time import datetime_to_epoch
+from fsspec import AbstractFileSystem
+from synapseclient.api import get_children
 from synapseclient.client import Synapse
+from synapseclient.core.async_utils import wrap_async_generator_to_sync_generator
 from synapseclient.core.exceptions import SynapseFileNotFoundError, SynapseHTTPError
 from synapseclient.core.utils import iso_to_datetime
-from synapseclient.entity import Entity, File, Folder, Project, is_container
+from synapseclient.models import File, Folder, Project, UserProfile
+from synapseclient.operations import FileOptions
+from synapseclient.operations import delete as syn_delete
+from synapseclient.operations import get as syn_get
+from synapseclient.operations import store as syn_store
 
 from synapsefs.remote_file import RemoteFile
+from synapsefs.utils import (
+    normalize_mode,
+    pad_empty_file,
+    parse_mode,
+    rename_to_target,
+    strip_mode,
+)
 
-RawInfo = Mapping[str, Mapping[str, object]]
+SynapseEntity: TypeAlias = File | Folder | Project
 
 
 @contextmanager
-def synapse_errors(path: str) -> Generator:
-    """A context manager for mapping ``synapseclient`` errors to ``fs`` errors."""
+def synapse_errors(path: str) -> Generator[None, None, None]:
+    """A context manager for mapping synapseclient errors to standard exceptions."""
     try:
         yield
     except SynapseFileNotFoundError:
-        raise ResourceNotFound(path)
+        raise FileNotFoundError(path)
     except SynapseHTTPError as err:
         message = err.args[0]
         if "does not exist" in message:
-            raise ResourceNotFound(path)
+            raise FileNotFoundError(path)
         elif "already exists" in message:
-            raise DirectoryExists(message)
+            raise FileExistsError(message)
         else:
             raise  # Raise original exception as is
 
 
-class SynapseFS(FS):
-    """A file system-like interface for Synapse."""
+class SynapseFS(AbstractFileSystem):  # type: ignore[misc]
+    """A file system-like interface for Synapse using fsspec."""
 
-    NULL_BYTE = b"\x00"
+    protocol = "syn"
+    cachable = False
 
     SYNID_REGEX = re.compile(r"syn[0-9]+")
 
-    SUPPORTED_TYPES: dict[str, Type[Entity]]
+    SUPPORTED_TYPES: dict[str, type]
     SUPPORTED_TYPES = {
         "file": File,
         "folder": Folder,
         "project": Project,
     }
 
+    DIRECTORY_ENTITY_TYPES: frozenset[str]
+    DIRECTORY_ENTITY_TYPES = frozenset(
+        {
+            "org.sagebionetworks.repo.model.Folder",
+            "org.sagebionetworks.repo.model.Project",
+        }
+    )
+
     DEFAULT_SYNAPSE_ARGS: dict[str, Any]
     DEFAULT_SYNAPSE_ARGS = {
         "silent": True,
     }
 
-    _meta = {
-        "case_insensitive": False,
-        "invalid_path_chars": "\0",
-        "network": True,
-        "read_only": False,
-        "thread_safe": True,
-        "unicode_paths": False,
-        "virtual": False,
-    }
-
     def __init__(
         self,
-        root: Optional[str] = None,
-        auth_token: Optional[str] = None,
-        synapse_args: Optional[dict[str, Any]] = None,
+        root: str | None = None,
+        auth_token: str | None = None,
+        synapse_args: dict[str, Any] | None = None,
+        **kwargs: Any,
     ) -> None:
-        """Construct a Synapse filesystem for
-        `PyFilesystem <https://pyfilesystem.org>`_
+        """Construct a Synapse filesystem for fsspec.
 
         Args:
             root: Synapse ID for a project or folder.
@@ -99,11 +92,11 @@ class SynapseFS(FS):
             auth_token: Synapse personal access token.
                 Defaults to None.
             synapse_args: Dictionary of arguments to pass to
-                the ``Synapse`` class. Defaults to None.
+                the Synapse class. Defaults to None.
         """
-        super(SynapseFS, self).__init__()
+        super().__init__(**kwargs)
         self.auth_token = auth_token
-        self.synapse_args = synapse_args or self.DEFAULT_SYNAPSE_ARGS
+        self.synapse_args = synapse_args or self.DEFAULT_SYNAPSE_ARGS.copy()
         self._local = threading.local()
         self.root = self._resolve_root(root)
 
@@ -129,19 +122,26 @@ class SynapseFS(FS):
         """Check whether the given text is a Synapse ID."""
         return self.SYNID_REGEX.fullmatch(text) is not None
 
-    def _resolve_root(self, root: Optional[str]) -> Optional[str]:
+    @classmethod
+    def _strip_protocol(cls, path: str) -> str:
+        """Strip the syn:// protocol prefix from a path."""
+        if path.startswith("syn://"):
+            path = path[len("syn://") :]
+        return path.strip("/")
+
+    def _resolve_root(self, root: str | None) -> str | None:
         """Resolve the given root path (if not None) to a Synapse entity ID.
 
         Args:
-            root (Optional[str]): Synapse ID for a project or folder.
+            root: Synapse ID for a project or folder.
                 Defaults to None (rootless mode).
 
         Raises:
-            CreateFailed: If the root is not or does not start with a Synapse ID.
-            CreateFailed: If the root does not resolve to a project or folder.
+            ValueError: If the root is not or does not start with a Synapse ID.
+            ValueError: If the root does not resolve to a project or folder.
 
         Returns:
-            Optional[str]: A single Synapse ID to act as the root.
+            A single Synapse ID to act as the root.
         """
         if root is None or root == "":
             return None
@@ -152,46 +152,47 @@ class SynapseFS(FS):
 
         if num_root_parts == 1:
             if not self.is_synapse_id(root):
-                raise CreateFailed(error_message)
+                raise ValueError(error_message)
         else:  # num_root_parts > 1
             starting_entity, _, path = root.strip("/").partition("/")
             if not self.is_synapse_id(starting_entity):
-                raise CreateFailed(error_message)
+                raise ValueError(error_message)
             root = self._path_to_synapse_id(path, starting_entity)
 
         # Ensure that the root is not a file
         with synapse_errors(root):
-            root_entity = self.synapse.get(root, downloadFile=False)
-        if not is_container(root_entity):
+            root_entity = syn_get(
+                root,
+                file_options=FileOptions(download_file=False),
+                synapse_client=self.synapse,
+            )
+        if not isinstance(root_entity, (Folder, Project)):
             message = f"Root ({root}) must resolve to a project or folder."
-            raise CreateFailed(message)
+            raise ValueError(message)
 
         return root
 
-    def _path_to_synapse_id(
-        self, path: str, starting_entity: Optional[str] = None
-    ) -> str:
-        """Resolve an FS path to a Synapse ID starting from the root.
+    def _path_to_synapse_id(self, path: str, starting_entity: str | None = None) -> str:
+        """Resolve a path to a Synapse ID starting from the root.
 
-        The slash-delimited parts of the given FS path can consist
+        The slash-delimited parts of the given path can consist
         of folder/file names or Synapse IDs.
 
         If the SynapseFS instance does not have a root, then the
         given path must start with a Synapse ID.
 
         Args:
-            path (str): Path to a resource on the filesystem
-            starting_entity (str): Synapse ID for where to
+            path: Path to a resource on the filesystem
+            starting_entity: Synapse ID for where to
                 start the traversal. Defaults to the root.
 
         Returns:
-            str: Synapse ID for the resolved file or folder
+            Synapse ID for the resolved file or folder
 
         Raises:
             ValueError: If the path does not start with a
                 Synapse ID while SynapseFS is rootless.
-            InvalidPath: If ``path`` is not absolute.
-            ResourceNotFound: If the ``path`` does not
+            FileNotFoundError: If the path does not
                 resolve to existing entities.
         """
         original_path = path
@@ -233,7 +234,7 @@ class SynapseFS(FS):
             if next_part in children:
                 current_entity = children[next_part]["id"]
             else:
-                raise ResourceNotFound(path)
+                raise FileNotFoundError(path)
 
         return current_entity
 
@@ -241,39 +242,43 @@ class SynapseFS(FS):
         self,
         synapse_id: str,
         download_file: bool = False,
-    ) -> Entity:
+    ) -> SynapseEntity:
         """Retrieve and validate (meta)data for a Synapse entity
 
         Args:
-            synapse_id (str): A Synapse ID
-            download_file (bool): Whether to download the associated file(s)
+            synapse_id: A Synapse ID
+            download_file: Whether to download the associated file(s)
 
         Returns:
-            Entity: The associated Synapse entity
+            The associated Synapse entity
 
         Raises:
-            ResourceNotFound: If ``synapse_id`` does not exist.
-            ResourceInvalid: If ``synapse_id`` does not correspond
+            FileNotFoundError: If synapse_id does not exist.
+            ValueError: If synapse_id does not correspond
                  to a supported entity type.
         """
         with synapse_errors(synapse_id):
-            entity = self.synapse.get(synapse_id, downloadFile=download_file)
+            entity = syn_get(
+                synapse_id,
+                file_options=FileOptions(download_file=download_file),
+                synapse_client=self.synapse,
+            )
         valid_types = tuple(self.SUPPORTED_TYPES.values())
         if not isinstance(entity, valid_types):
             type_ = type(entity)
             message = f"{synapse_id} ({type_}) is not supported yet ({valid_types})."
-            raise ResourceInvalid(message)
+            raise ValueError(message)
         return entity
 
-    def _path_to_entity(self, path: str, download_file: bool = False) -> Entity:
+    def _path_to_entity(self, path: str, download_file: bool = False) -> SynapseEntity:
         """Perform the validation and retrieval steps for a Synapse entity.
 
         Arguments:
-            path (str): A path.
-            download_file (bool): Whether to download the associated file(s)
+            path: A path.
+            download_file: Whether to download the associated file(s)
 
         Returns:
-            Entity: A Synapse entity (File, Folder, or Project).
+            A Synapse entity (File, Folder, or Project).
         """
         synapse_id = self._path_to_synapse_id(path)
         with synapse_errors(path):
@@ -296,378 +301,493 @@ class SynapseFS(FS):
 
     def _get_parent_id(self, entity_id: str) -> str:
         with synapse_errors(entity_id):
-            entity = self.synapse.get(entity_id, downloadFile=False)
+            entity = syn_get(
+                entity_id,
+                file_options=FileOptions(download_file=False),
+                synapse_client=self.synapse,
+            )
         if isinstance(entity, Project):
             message = f"Project ({entity.id}) has no parent."
             raise ValueError(message)
-        parent_id = entity.parentId
+        parent_id = entity.parent_id
         with synapse_errors(parent_id):
-            parent = self.synapse.get(parent_id, downloadFile=False)
+            parent = syn_get(
+                parent_id,
+                file_options=FileOptions(download_file=False),
+                synapse_client=self.synapse,
+            )
+        if parent.id is None:
+            raise ValueError(f"Parent entity for {entity_id} has no ID.")
         return parent.id
 
-    def _get_children(self, entity_id: str) -> list[dict]:
+    def _get_children(self, entity_id: str) -> list[dict[str, Any]]:
         """Retrieve a list of children for a Synapse entity
 
         Args:
-            entity_id (str): The Synapse ID of a project or folder.
+            entity_id: The Synapse ID of a project or folder.
 
         Returns:
-            list[dict]: List of children entities.
+            List of children entities.
         """
         include_types = list(self.SUPPORTED_TYPES.keys())
         with synapse_errors(entity_id):
-            children = self.synapse.getChildren(entity_id, includeTypes=include_types)
+            children = wrap_async_generator_to_sync_generator(
+                get_children,
+                parent=entity_id,
+                include_types=include_types,
+                synapse_client=self.synapse,
+            )
         return list(children)
 
-    def getinfo(self, path: str, namespaces: Optional[Collection[str]] = None) -> Info:
-        """Get information about a resource on a filesystem.
+    def info(self, path: str, **kwargs: Any) -> dict[str, Any]:
+        """Get information about a resource on the filesystem.
 
         Arguments:
-            path (str): A path to a resource on the filesystem.
-            namespaces (list, optional): Info namespaces to query. The
-                `"basic"` namespace is alway included in the returned
-                info, whatever the value of `namespaces` may be.
+            path: A path to a resource on the filesystem.
 
         Returns:
-            ~fs.info.Info: resource information object.
+            Dictionary with resource information.
 
         Raises:
-            ResourceNotFound: If ``path`` does not exist.
-
-        For more information regarding resource information,
-            see :ref:`pyfilesystem:info`.
-
+            FileNotFoundError: If path does not exist.
         """
-        self.validatepath(path)
+        path = self._strip_protocol(path)
         entity = self._path_to_entity(path)
 
-        raw_info = dict()
-        namespaces = namespaces or ()
-        name = entity.name
-        is_dir = is_container(entity)
-        is_file = not is_dir
-        raw_info["basic"] = {
-            "name": name,
-            "is_dir": not is_file,  # Folder and projects are both file containers
+        is_dir = isinstance(entity, (Folder, Project))
+
+        info: dict[str, Any] = {
+            "name": path,
+            "type": "directory" if is_dir else "file",
         }
 
-        if "details" in namespaces:
-            size = entity._file_handle.contentSize if is_file else 0
-            type_ = ResourceType.file if is_file else ResourceType.directory
+        if is_dir:
+            info["size"] = 0
+        elif entity.file_handle is not None:
+            info["size"] = entity.file_handle.content_size
+        else:
+            info["size"] = None
 
-            raw_info["details"] = {
-                "accessed": None,
-                "created": datetime_to_epoch(iso_to_datetime(entity.createdOn)),
-                "metadata_changed": datetime_to_epoch(
-                    iso_to_datetime(entity.modifiedOn)
-                ),
-                "modified": datetime_to_epoch(iso_to_datetime(entity.modifiedOn)),
-                "size": size,
-                "type": type_,
-                "_write": [],
-            }
+        created_on = iso_to_datetime(entity.created_on)
+        modified_on = iso_to_datetime(entity.modified_on)
+        info["created"] = created_on.timestamp()
+        info["modified"] = modified_on.timestamp()
 
-        if "synapse" in namespaces:
-            creator_id = int(entity.createdBy)
-            creator = self.synapse.getUserProfile(creator_id)
-            creator_username = creator["userName"]
+        # Synapse-specific metadata (cheap — already on the entity object)
+        info["synapse_id"] = entity.id
+        info["synapse_parent_id"] = entity.parent_id
+        info["synapse_etag"] = entity.etag
+        info["synapse_entity_type"] = type(entity).__name__
 
-            modifier_id = int(entity.modifiedBy)
-            modifier = self.synapse.getUserProfile(modifier_id)
-            modifier_username = modifier["userName"]
+        info["synapse_creator_id"] = int(entity.created_by)
+        info["synapse_modifier_id"] = int(entity.modified_by)
 
-            raw_info["synapse"] = {
-                "concrete_type": entity.concreteType,
-                "short_type": entity.concreteType.split(".")[-1],
-                "creator_id": creator_id,
-                "creator_username": creator_username,
-                "etag": entity.etag,
-                "id": entity.id,
-                "modifier_id": modifier_id,
-                "modifier_username": modifier_username,
-                "parent_id": entity.parentId,
-                "content_type": None,
-                "content_md5": None,
-                "version_label": None,
-                "version_number": None,
-                "_write": [],
-            }
+        # User profile lookups are expensive (extra API calls).
+        # Only fetch when explicitly requested via detail=True kwarg.
+        if kwargs.get("detail", False):
+            creator = UserProfile.from_id(
+                user_id=info["synapse_creator_id"],
+                synapse_client=self.synapse,
+            )
+            info["synapse_creator_username"] = creator.username
 
-            if is_file:
-                file_info = {
-                    "content_type": entity._file_handle.contentType,
-                    "content_md5": entity._file_handle.contentMd5,
-                    "version_label": entity.versionLabel,
-                    "version_number": entity.versionNumber,
-                }
-                raw_info["synapse"].update(file_info)
+            modifier = UserProfile.from_id(
+                user_id=info["synapse_modifier_id"],
+                synapse_client=self.synapse,
+            )
+            info["synapse_modifier_username"] = modifier.username
+        else:
+            info["synapse_creator_username"] = None
+            info["synapse_modifier_username"] = None
 
-        if "annotations" in namespaces:
-            raw_info["annotations"] = entity.annotations
+        info["synapse_content_type"] = None
+        info["synapse_content_md5"] = None
+        info["synapse_version_label"] = None
+        info["synapse_version_number"] = None
 
-        return Info(raw_info)
+        if not is_dir:
+            if entity.file_handle is not None:
+                info["synapse_content_type"] = entity.file_handle.content_type
+                info["synapse_content_md5"] = entity.file_handle.content_md5
+            info["synapse_version_label"] = entity.version_label
+            info["synapse_version_number"] = entity.version_number
 
-    def listdir(self, path: str) -> list[str]:
-        """Get a list of the resource names in a directory.
+        info["annotations"] = entity.annotations
 
-        This method will return a list of the resources in a directory.
-        A *resource* is a file, directory, or one of the other types
-        defined in `~fs.enums.ResourceType`.
+        return info
+
+    @overload
+    def ls(
+        self, path: str, detail: Literal[True] = ..., **kwargs: Any
+    ) -> list[dict[str, Any]]:
+        ...
+
+    @overload
+    def ls(self, path: str, detail: Literal[False], **kwargs: Any) -> list[str]:
+        ...
+
+    def ls(
+        self, path: str, detail: bool = True, **kwargs: Any
+    ) -> list[str] | list[dict[str, Any]]:
+        """Get a list of the resources in a directory.
 
         Arguments:
-            path (str): A path to a directory on the filesystem
+            path: A path to a directory on the filesystem.
+            detail: If True, return a list of info dicts. If False,
+                return a list of full paths.
 
         Returns:
-            list: list of names, relative to ``path``.
+            List of paths (strings) or info dicts. When detail is True,
+            each dict contains name, type, and size keys. Note that
+            fetching file sizes requires an additional API call per file
+            because the Synapse children listing does not include sizes.
 
         Raises:
-            DirectoryExpected: If ``path`` is not a directory.
-            ResourceNotFound: If ``path`` does not exist.
+            NotADirectoryError: If path is not a directory.
         """
-        self.validatepath(path)
+        path = self._strip_protocol(path)
         entity = self._path_to_entity(path)
 
-        if not is_container(entity):
+        if not isinstance(entity, (Folder, Project)):
             synapse_id = entity.id
             type_ = type(entity)
             message = f"{synapse_id} ({type_}) is not a folder or project."
-            raise DirectoryExpected(message)
+            raise NotADirectoryError(message)
 
         children = self._get_children(entity.id)
-        children_names = [child["name"] for child in children]
 
-        return children_names
+        if detail:
+            result = []
+            for child in children:
+                child_path = f"{path}/{child['name']}" if path else child["name"]
+                is_dir = child["type"] in self.DIRECTORY_ENTITY_TYPES
+                child_info: dict[str, Any] = {
+                    "name": child_path,
+                    "type": "directory" if is_dir else "file",
+                }
+                if is_dir:
+                    child_info["size"] = 0
+                # TODO: https://sagebionetworks.jira.com/browse/DPE-1634
+                # Getting sizes for each file in the directory could be very slow,
+                #  but is the spec for this method.
+                else:
+                    file_entity = syn_get(
+                        child["id"],
+                        file_options=FileOptions(download_file=False),
+                        synapse_client=self.synapse,
+                    )
+                    fh = file_entity.file_handle
+                    child_info["size"] = fh.content_size if fh is not None else None
+                result.append(child_info)
+            return result
+        else:
+            return [
+                f"{path}/{child['name']}" if path else child["name"]
+                for child in children
+            ]
 
-    def makedir(
+    def mkdir(
         self,
         path: str,
-        permissions: Optional[Permissions] = None,
-        recreate: bool = False,
-    ) -> SubFS[FS]:
+        create_parents: bool = True,
+        **kwargs: Any,
+    ) -> None:
         """Make a directory.
 
         Arguments:
-            path (str): Path to directory from root.
-            permissions (~fs.permissions.Permissions, optional): a
-                `Permissions` instance, or `None` to use default.
-            recreate (bool): Set to `True` to avoid raising an error if
-                the directory already exists (defaults to `False`).
-
-        Returns:
-            ~fs.subfs.SubFS: a filesystem whose root is the new directory.
+            path: Path to directory from root.
+            create_parents: If True, create any missing parent directories.
+                If False, the parent directory must already exist.
 
         Raises:
-            DirectoryExists: If the path already exists.
-            ResourceNotFound: If the path is not found.
+            FileExistsError: If the directory already exists.
+            FileNotFoundError: If create_parents is False and the parent
+                directory does not exist.
         """
-        self.validatepath(path)
+        path = self._strip_protocol(path)
 
-        if path == "/":
-            if recreate:
-                return SubFS(self, path)
-            else:
-                message = "Root directory ('/') already exists."
-                raise DirectoryExists(message)
+        if path == "":
+            return
 
         posix_path = PurePosixPath(path)
         folder_name = str(posix_path.name)
-        parent = self._path_to_parent_id(path)
+        parent_path = str(posix_path.parent)
 
-        folder = Folder(folder_name, parent)
+        if create_parents and parent_path not in ("", "."):
+            parent_id = self._makedirs(parent_path, exist_ok=True)
+        else:
+            parent_id = self._path_to_parent_id(path)
+
+        folder = Folder(name=folder_name, parent_id=parent_id, create_or_update=False)
         with synapse_errors(path):
-            self.synapse.store(folder, createOrUpdate=recreate)
+            syn_store(folder, synapse_client=self.synapse)
 
-        return SubFS(self, folder.name)
+    def makedirs(self, path: str, exist_ok: bool = False) -> None:
+        """Make directories recursively.
 
-    def openbin(
-        self, path: str, mode: str = "r", buffering: int = -1, **options: Any
-    ) -> BinaryIO:
+        Arguments:
+            path: Path to directory from root.
+            exist_ok: If True, do not raise an error if the leaf directory
+                already exists. Existing intermediate directories are
+                always tolerated.
+
+        Raises:
+            FileExistsError: If exist_ok is False and the leaf directory
+                already exists.
+            NotADirectoryError: If any path component is an existing file.
+            ValueError: If rootless and the path does not start with a
+                Synapse ID.
+        """
+        path = self._strip_protocol(path)
+
+        if path == "":
+            return
+
+        self._makedirs(path, exist_ok=exist_ok)
+
+    def _makedirs(self, path: str, exist_ok: bool = False) -> str:
+        """Internal makedirs that returns the leaf's Synapse ID.
+
+        Caller must ensure path is non-empty and already protocol-stripped.
+        """
+        parts = path.strip("/").split("/")
+
+        # Determine the starting entity
+        if self.root is not None:
+            current_parent = self.root
+            start_idx = 0
+        elif self.is_synapse_id(parts[0]):
+            current_parent = parts[0]
+            start_idx = 1
+        else:
+            message = f"Path ({path}) must start with a Synapse ID when rootless."
+            raise ValueError(message)
+
+        remaining = parts[start_idx:]
+        for i, part in enumerate(remaining):
+            is_leaf = i == len(remaining) - 1
+            children = self._get_children(current_parent)
+            child_match = [c for c in children if c["name"] == part]
+            if child_match:
+                child = child_match[0]
+                if child["type"] not in self.DIRECTORY_ENTITY_TYPES:
+                    raise NotADirectoryError(f"{part} is not a directory")
+                if is_leaf and not exist_ok:
+                    raise FileExistsError(path)
+                current_parent = child["id"]
+            else:
+                folder = Folder(name=part, parent_id=current_parent)
+                with synapse_errors(path):
+                    folder = syn_store(folder, synapse_client=self.synapse)
+                current_parent = folder.id
+
+        return current_parent
+
+    def _open(self, path: str, mode: str = "rb", **kwargs: Any) -> RemoteFile:
         """Open a binary file-like object.
 
         Arguments:
-            path (str): A path on the filesystem.
-            mode (str): Mode to open file (must be a valid non-text mode,
-                defaults to *r*). Since this method only opens binary files,
-                the ``b`` in the mode string is implied.
-            buffering (int): Buffering policy (-1 to use default buffering,
-                0 to disable buffering, or any positive integer to indicate
-                a buffer size).
-            **options: keyword arguments for any additional information
-                required by the filesystem (if any).
+            path: A path on the filesystem.
+            mode: Mode to open file (defaults to 'rb').
 
         Returns:
-            io.IOBase: a *file-like* object.
+            A file-like object.
 
         Raises:
-            FileExpected: If ``path`` exists and is not a file.
-            FileExists: If the ``path`` exists, and
-                *exclusive mode* is specified (``x`` in the mode).
-            ResourceNotFound: If ``path`` does not exist and
-                ``mode`` does not imply creating the file, or if any
-                ancestor of ``path`` does not exist.
+            IsADirectoryError: If path exists and is a directory.
+            FileExistsError: If the path exists and
+                *exclusive mode* is specified (x in the mode).
+            FileNotFoundError: If path does not exist and
+                mode does not imply creating the file.
         """
-        self.validatepath(path)
-
-        mode_obj = Mode(mode)
-        mode_obj.validate_bin()
+        path = self._strip_protocol(path)
 
         posix_path = PurePosixPath(path)
         file_name = str(posix_path.name)
 
+        parsed = parse_mode(mode)
+        reading = parsed.reading
+        writing = parsed.writing
+        appending = parsed.appending
+        creating = parsed.creating
+        exclusive = parsed.exclusive
+
         try:
-            info = self.getinfo(path)
+            file_info = self.info(path)
             path_exists = True
-            is_dir = info.is_dir
-        except ResourceNotFound:
+            is_dir = file_info["type"] == "directory"
+        except FileNotFoundError:
             path_exists = False
             is_dir = False
 
         if path_exists and is_dir:
-            raise FileExpected(path)
+            raise IsADirectoryError(path)
 
-        if path_exists and mode_obj.exclusive:
-            raise FileExists(path)
+        if path_exists and exclusive:
+            raise FileExistsError(path)
 
         if not path_exists:
-            if mode_obj.create:
+            if creating:
                 # Make sure the parent exists
                 self._path_to_parent_id(path)
             else:
-                raise ResourceNotFound(path)
+                raise FileNotFoundError(path)
 
         # Create temporary directory for housing files
         temp_dir = TemporaryDirectory()
         temp_path = temp_dir.name
 
         def on_close(remote_file: RemoteFile) -> None:
-            """Called when the S3 file closes, to upload data."""
-            # If the file is empty, add a null byte to bypass
-            # Synapse restriction on empty files
-            remote_file.seek(0, os.SEEK_END)
-            if remote_file.tell() == 0:
-                remote_file.write(self.NULL_BYTE)
-            remote_file.raw.close()
-            if mode_obj.create or mode_obj.writing:
-                parent = self._path_to_parent_id(path)
-                old_file_path = Path(remote_file.raw.name)
-                new_file_path = old_file_path.parent / file_name
-                shutil.move(old_file_path, new_file_path)
-                with synapse_errors(path):
-                    file = File(str(new_file_path), parent)
-                    file = self.synapse.store(file)
-            temp_dir.cleanup()
+            """Called when the file closes, to upload data."""
+            try:
+                if creating or writing:
+                    pad_empty_file(remote_file)
+                remote_file.raw.close()
+                if creating or writing:
+                    parent = self._path_to_parent_id(path)
+                    new_file_path = rename_to_target(remote_file.raw.name, file_name)
+                    with synapse_errors(path):
+                        file = File(path=str(new_file_path), parent_id=parent)
+                        file = syn_store(file, synapse_client=self.synapse)
+            finally:
+                temp_dir.cleanup()
+
+        # Determine platform mode for the underlying file
+        platform_mode = normalize_mode(mode)
 
         # The existing file should be downloaded first
-        mode_bin = mode_obj.to_platform_bin()
-        if path_exists and (mode_obj.reading or mode_obj.appending):
+        if path_exists and (reading or appending):
             entity = self._path_to_entity(path)
             with synapse_errors(path):
-                entity = self.synapse.get(entity, downloadLocation=temp_path)
-            # TODO: Re-enable this if we identify a use case
-            # Truncate "empty" files that only contain the null byte
-            # with open(entity.path, "r+b") as f:
-            #     if f.read(2) == self.NULL_BYTE:
-            #         f.truncate(0)
-            # Re-open the file using the specified mode
-            target_file = open(entity.path, mode_bin, buffering)
+                entity = syn_get(
+                    entity.id,
+                    file_options=FileOptions(
+                        download_file=True,
+                        download_location=temp_path,
+                    ),
+                    synapse_client=self.synapse,
+                )
+            target_file = open(entity.path, platform_mode, -1)
         # Otherwise, any existing file will be ignored
         else:
             target_file = NamedTemporaryFile(
-                mode_bin, buffering, delete=False, dir=temp_path
+                platform_mode, -1, delete=False, dir=temp_path
             )
 
         # Set position of file descriptor based on the mode
-        if mode_obj.appending:
+        if appending:
             target_file.seek(0, os.SEEK_END)
         else:
             target_file.seek(0, os.SEEK_SET)
 
-        return RemoteFile(target_file, file_name, mode_obj, on_close)
+        return RemoteFile(target_file, strip_mode(mode), on_close)
 
-    def remove(self, path: str) -> None:
+    def rm_file(self, path: str) -> None:
         """Remove a file from the filesystem.
 
         Arguments:
-            path (str): Path of the file to remove.
+            path: Path of the file to remove.
 
         Raises:
-            FileExpected: If the path is a directory.
-            ResourceNotFound: If the path does not exist.
+            IsADirectoryError: If the path is a directory.
+            FileNotFoundError: If the path does not exist.
         """
-        self.validatepath(path)
+        path = self._strip_protocol(path)
         entity = self._path_to_entity(path)
 
-        if is_container(entity):
+        if isinstance(entity, (Folder, Project)):
             synapse_id = entity.id
             type_ = type(entity)
             message = f"{synapse_id} ({type_}) is a folder or project."
-            raise FileExpected(message)
+            raise IsADirectoryError(message)
 
-        self.synapse.delete(entity)
+        syn_delete(entity, synapse_client=self.synapse)
 
-    def removedir(self, path: str) -> None:
+    def rmdir(self, path: str) -> None:
         """Remove a directory from the filesystem.
 
         Arguments:
-            path (str): Path of the directory to remove.
+            path: Path of the directory to remove.
 
         Raises:
-            DirectoryNotEmpty: If the directory is not empty (
-                see `~fs.base.FS.removetree` for a way to remove the
-                directory contents).
-            DirectoryExpected: If the path does not refer to
-                a directory.
-            ResourceNotFound: If no resource exists at the
-                given path.
-            RemoveRootError: If an attempt is made to remove
-                the root directory (i.e. ``'/'``)
+            OSError: If the directory is not empty.
+            NotADirectoryError: If the path does not refer to a directory.
+            FileNotFoundError: If no resource exists at the given path.
+            PermissionError: If an attempt is made to remove the root.
         """
-        if path == "/":
-            message = "Cannot remove the root folder ('/')."
-            raise RemoveRootError(message)
+        path = self._strip_protocol(path)
 
-        self.validatepath(path)
+        if path == "":
+            message = "Cannot remove the root folder."
+            raise PermissionError(message)
+
         entity = self._path_to_entity(path)
 
-        if not is_container(entity):
+        if not isinstance(entity, (Folder, Project)):
             synapse_id = entity.id
             type_ = str(type(entity))
             message = f"{synapse_id} ({type_}) is not a folder or project."
-            raise DirectoryExpected(message)
+            raise NotADirectoryError(message)
 
-        children = self.listdir(path)
+        children = self._get_children(entity.id)
         if len(children) > 0:
-            type_ = "Folder" if isinstance(entity, Folder) else "Project"
+            type_name = "Folder" if isinstance(entity, Folder) else "Project"
             synapse_id = entity.id
-            message = f"{type_} ({synapse_id}) is not empty ({children})."
-            raise DirectoryNotEmpty(message)
+            child_names = [c["name"] for c in children]
+            message = f"{type_name} ({synapse_id}) is not empty ({child_names})."
+            raise OSError(message)
 
-        self.synapse.delete(entity)
+        syn_delete(entity, synapse_client=self.synapse)
 
-    def setinfo(self, path: str, info: RawInfo) -> None:
-        """Set info on a resource.
-
-        This method is the complement to `~fs.base.FS.getinfo`
-        and is used to set info values on a resource.
+    def rm(
+        self,
+        path: str,
+        recursive: bool = False,
+        maxdepth: int | None = None,
+    ) -> None:
+        """Remove file(s) or directory.
 
         Arguments:
-            path (str): Path to a resource on the filesystem.
-            info (dict): Dictionary of resource info.
-
-        Raises:
-            ResourceNotFound: If ``path`` does not exist
-                on the filesystem
-
-        The ``info`` dict should be in the same format as the raw
-        info returned by ``getinfo(file).raw``.
-
-        Example:
-            >>> details_info = {"details": {
-            ...     "modified": time.time()
-            ... }}
-            >>> my_fs.setinfo('file.txt', details_info)
+            path: Path to remove.
+            recursive: If True, remove directories recursively.
+            maxdepth: Maximum depth to recurse (unused, for API compat).
         """
-        # A placeholder to raise errors if called with an non-existing path
-        self.validatepath(path)
-        self._path_to_entity(path)
-        # TODO: Implement some writeable info (e.g., annotations)
+        path = self._strip_protocol(path)
+        entity = self._path_to_entity(path)
+
+        if isinstance(entity, (Folder, Project)):
+            if not recursive:
+                # Check if empty
+                children = self._get_children(entity.id)
+                if len(children) > 0:
+                    raise OSError(f"Directory not empty: {path}")
+            syn_delete(entity, synapse_client=self.synapse)
+        else:
+            syn_delete(entity, synapse_client=self.synapse)
+
+    def touch(self, path: str, truncate: bool = True, **kwargs: Any) -> None:
+        """Create an empty file, or truncate an existing one.
+
+        If the file already exists and truncate is False, this is a no-op.
+        Unlike POSIX touch, this does not update the timestamp of an
+        existing file because Synapse has no lightweight timestamp-update API.
+
+        Arguments:
+            path: Path to the file.
+            truncate: If True, truncate the file if it exists.
+                If False and the file exists, do nothing.
+        """
+        path = self._strip_protocol(path)
+
+        try:
+            self.info(path)
+            exists = True
+        except FileNotFoundError:
+            exists = False
+
+        if exists and not truncate:
+            return
+
+        # Write empty content (will become null byte due to Synapse restriction)
+        with self._open(path, "wb"):
+            pass
