@@ -2,6 +2,7 @@
 
 import fsspec
 import pytest
+from pytest_mock import MockerFixture
 from synapseclient.core.exceptions import SynapseFileNotFoundError, SynapseHTTPError
 
 from synapsefs.synapsefs import SynapseFS, synapse_errors
@@ -135,4 +136,73 @@ class TestFsspecRegistration:
         """Verify that fsspec.filesystem('syn') returns a SynapseFS instance."""
         fs = fsspec.filesystem("syn")
         assert isinstance(fs, SynapseFS)
+
+
+class TestMakedirs:
+    """Tests for SynapseFS._makedirs (mocked, no Synapse calls)."""
+
+    FILE_TYPE = "org.sagebionetworks.repo.model.FileEntity"
+    FOLDER_TYPE = "org.sagebionetworks.repo.model.Folder"
+
+    def test_file_in_path_raises_not_a_directory(self, mocker: MockerFixture) -> None:
+        """Verify that a FileEntity in the path raises NotADirectoryError.
+
+        Regression: the type literal in _makedirs previously read 'File' rather
+        than 'FileEntity', so file-blockers fell through to a Synapse 400.
+        """
+        fs = SynapseFS()
+        mocker.patch.object(
+            fs,
+            "_get_children",
+            return_value=[
+                {"id": "syn1", "name": "blocker.txt", "type": self.FILE_TYPE}
+            ],
+        )
+        with pytest.raises(NotADirectoryError, match="blocker.txt"):
+            fs._makedirs("syn999/blocker.txt/below")
+
+    def test_existing_leaf_without_exist_ok_raises(self, mocker: MockerFixture) -> None:
+        """Verify existing leaf folder raises FileExistsError without exist_ok."""
+        fs = SynapseFS()
+        mocker.patch.object(
+            fs,
+            "_get_children",
+            return_value=[{"id": "syn2", "name": "leaf", "type": self.FOLDER_TYPE}],
+        )
+        with pytest.raises(FileExistsError):
+            fs._makedirs("syn999/leaf")
+
+    def test_existing_leaf_with_exist_ok_returns_id(
+        self, mocker: MockerFixture
+    ) -> None:
+        """Verify existing leaf folder with exist_ok=True returns its ID."""
+        fs = SynapseFS()
+        mocker.patch.object(
+            fs,
+            "_get_children",
+            return_value=[{"id": "syn2", "name": "leaf", "type": self.FOLDER_TYPE}],
+        )
+        assert fs._makedirs("syn999/leaf", exist_ok=True) == "syn2"
+
+    def test_creates_missing_intermediates(self, mocker: MockerFixture) -> None:
+        """Verify missing intermediates are created via syn_store."""
+        fs = SynapseFS()
+        fs._local.synapse = mocker.MagicMock()
+        mocker.patch.object(fs, "_get_children", return_value=[])
+        store_mock = mocker.patch(
+            "synapsefs.synapsefs.syn_store",
+            side_effect=[
+                mocker.MagicMock(id="syn_a"),
+                mocker.MagicMock(id="syn_b"),
+            ],
+        )
+        result = fs._makedirs("syn999/a/b")
+        assert result == "syn_b"
+        assert store_mock.call_count == 2
+
+    def test_rootless_non_id_path_raises_value_error(self) -> None:
+        """Verify rootless path not starting with a Synapse ID raises ValueError."""
+        fs = SynapseFS()
+        with pytest.raises(ValueError, match="must start with a Synapse ID"):
+            fs._makedirs("not_a_syn_id/foo")
         assert fs.root is None

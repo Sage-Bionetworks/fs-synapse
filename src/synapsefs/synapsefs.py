@@ -64,6 +64,14 @@ class SynapseFS(AbstractFileSystem):  # type: ignore[misc]
         "project": Project,
     }
 
+    DIRECTORY_ENTITY_TYPES: frozenset[str]
+    DIRECTORY_ENTITY_TYPES = frozenset(
+        {
+            "org.sagebionetworks.repo.model.Folder",
+            "org.sagebionetworks.repo.model.Project",
+        }
+    )
+
     DEFAULT_SYNAPSE_ARGS: dict[str, Any]
     DEFAULT_SYNAPSE_ARGS = {
         "silent": True,
@@ -452,10 +460,7 @@ class SynapseFS(AbstractFileSystem):  # type: ignore[misc]
             result = []
             for child in children:
                 child_path = f"{path}/{child['name']}" if path else child["name"]
-                is_dir = child["type"] in (
-                    "org.sagebionetworks.repo.model.Folder",
-                    "org.sagebionetworks.repo.model.Project",
-                )
+                is_dir = child["type"] in self.DIRECTORY_ENTITY_TYPES
                 child_info: dict[str, Any] = {
                     "name": child_path,
                     "type": "directory" if is_dir else "file",
@@ -565,7 +570,7 @@ class SynapseFS(AbstractFileSystem):  # type: ignore[misc]
             child_match = [c for c in children if c["name"] == part]
             if child_match:
                 child = child_match[0]
-                if child["type"] == "org.sagebionetworks.repo.model.File":
+                if child["type"] not in self.DIRECTORY_ENTITY_TYPES:
                     raise NotADirectoryError(f"{part} is not a directory")
                 if is_leaf and not exist_ok:
                     raise FileExistsError(path)
