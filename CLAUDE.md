@@ -63,10 +63,10 @@ Source layout: `src/synapsefs/` with entry point registered as `fsspec.specs` (`
 ## Testing
 
 - **Markers:** `@pytest.mark.integration` for tests requiring live Synapse access. Non-integration tests run without network.
-- **Auth:** Integration tests require `SYNAPSE_AUTH_TOKEN` env var. CI runs integration tests only on ubuntu-latest + Python 3.11. When the token is unset, a `pytest_collection_modifyitems` hook in `tests/conftest.py` auto-skips any test whose `item.keywords` contain `"integration"` — i.e. anything carrying the `@pytest.mark.integration` marker (set per-module via `pytestmark` in `tests/integration/test_synapse_fs_integration.py`), plus anything whose class/module path matches that string. Gating happens at collection time rather than via fixture chains, so new integration tests skip correctly without needing to depend on the `auth_token` fixture.
+- **Auth:** Integration tests require `SYNAPSE_AUTH_TOKEN`. Without it, a `pytest_collection_modifyitems` hook in `tests/conftest.py` auto-skips anything marked `@pytest.mark.integration` (applied per-module via `pytestmark` in `tests/integration/test_synapse_fs_integration.py`). Skipping happens at collection time, so new integration tests don't need to depend on the `auth_token` fixture to skip correctly. CI runs integration tests only on ubuntu-latest + Python 3.11.
 - **Concurrency:** Integration tests use `pytest-xdist -n 4`. Thread-local Synapse clients make this safe.
 - **Test isolation:** Each integration test run creates a session-level root folder under `syn50555278`, with per-test subfolders cleaned up via finalizers.
-- **Test structure:** `tests/unit/` (no network: `test_remote_file.py`, `test_synapse_fs_unit.py`, `test_utils.py`), `tests/integration/test_synapse_fs_integration.py` (requires auth), `tests/conftest.py` (shared fixtures).
+- **Test structure:** `tests/unit/` (no network), `tests/integration/test_synapse_fs_integration.py` (requires auth), `tests/conftest.py` (shared fixtures).
 
 ## Related Systems
 
