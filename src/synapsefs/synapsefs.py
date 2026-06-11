@@ -346,7 +346,11 @@ class SynapseFS(AbstractFileSystem):  # type: ignore[misc]
             path: A path to a resource on the filesystem.
 
         Returns:
-            Dictionary with resource information.
+            Dictionary with resource information. The name key follows the
+            fsspec convention and holds the full path (which is the Synapse ID
+            for an ID-addressed path). The synapse_entity_name key carries the
+            human-readable display name of the entity as seen on Synapse, for
+            files, folders, and projects alike.
 
         Raises:
             FileNotFoundError: If path does not exist.
@@ -375,6 +379,9 @@ class SynapseFS(AbstractFileSystem):  # type: ignore[misc]
 
         # Synapse-specific metadata (cheap — already on the entity object)
         info["synapse_id"] = entity.id
+
+        # Human-readable display name of the entity as seen on Synapse.
+        info["synapse_entity_name"] = entity.name
         info["synapse_parent_id"] = entity.parent_id
         info["synapse_etag"] = entity.etag
         info["synapse_entity_type"] = type(entity).__name__
@@ -438,9 +445,11 @@ class SynapseFS(AbstractFileSystem):  # type: ignore[misc]
 
         Returns:
             List of paths (strings) or info dicts. When detail is True,
-            each dict contains name, type, and size keys. Note that
-            fetching file sizes requires an additional API call per file
-            because the Synapse children listing does not include sizes.
+            each dict contains name, type, size, and synapse_entity_name keys.
+            The synapse_entity_name key carries the child's human-readable
+            display name. Note that fetching file sizes requires an additional
+            API call per file because the Synapse children listing does not
+            include sizes.
 
         Raises:
             NotADirectoryError: If path is not a directory.
@@ -464,6 +473,7 @@ class SynapseFS(AbstractFileSystem):  # type: ignore[misc]
                 child_info: dict[str, Any] = {
                     "name": child_path,
                     "type": "directory" if is_dir else "file",
+                    "synapse_entity_name": child["name"],
                 }
                 if is_dir:
                     child_info["size"] = 0
