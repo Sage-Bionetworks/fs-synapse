@@ -346,11 +346,7 @@ class SynapseFS(AbstractFileSystem):  # type: ignore[misc]
             path: A path to a resource on the filesystem.
 
         Returns:
-            Dictionary with resource information. The name key follows the
-            fsspec convention and holds the full path (which is the Synapse ID
-            for an ID-addressed path). The synapse_entity_name key carries the
-            human-readable display name of the entity as seen on Synapse, for
-            files, folders, and projects alike.
+            Dictionary with resource information.
 
         Raises:
             FileNotFoundError: If path does not exist.
