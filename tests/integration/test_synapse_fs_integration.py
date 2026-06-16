@@ -138,6 +138,31 @@ class TestInfo:
         assert info["synapse_version_label"] is None
         assert info["synapse_version_number"] is None
 
+    def test_info_includes_synapse_entity_name(self, fs: SynapseFS) -> None:
+        """Verify that info exposes the human-readable name for a file."""
+        fs.pipe_file("report.txt", b"data")
+        info = fs.info("report.txt")
+        assert info["synapse_entity_name"] == "report.txt"
+
+    def test_info_synapse_entity_name_by_id(self, fs: SynapseFS) -> None:
+        """
+        Verify that an ID-addressed file still exposes its human-readable name.
+
+        info["name"] follows the fsspec convention and is the Synapse ID, but
+        synapse_entity_name carries the real name.
+        """
+        fs.pipe_file("byid.txt", b"data")
+        synapse_id = fs.info("byid.txt")["synapse_id"]
+        info = fs.info(synapse_id)
+        assert info["name"] == synapse_id
+        assert info["synapse_entity_name"] == "byid.txt"
+
+    def test_info_directory_synapse_entity_name(self, fs: SynapseFS) -> None:
+        """Verify synapse_entity_name falls back to the display name for a folder."""
+        fs.mkdir("mydir")
+        info = fs.info("mydir")
+        assert info["synapse_entity_name"] == "mydir"
+
     def test_info_includes_annotations(self, fs: SynapseFS) -> None:
         """Verify that info includes an 'annotations' key for a file."""
         fs.touch("annotated.txt")
@@ -195,6 +220,18 @@ class TestLs:
             assert "name" in entry
             assert "type" in entry
             assert "size" in entry
+
+    def test_ls_detail_includes_synapse_entity_name(self, fs: SynapseFS) -> None:
+        """Verify that each detail entry carries the child's display filename."""
+        fs.touch("d.txt")
+        fs.mkdir("e_dir")
+        entries = fs.ls("/", detail=True)
+        by_name = {e["synapse_entity_name"]: e for e in entries}
+        assert {"d.txt", "e_dir"} <= by_name.keys()
+        # synapse_entity_name carries the raw display name, while name is the
+        # full fsspec path that ends with that display name.
+        assert by_name["d.txt"]["name"].endswith("d.txt")
+        assert by_name["e_dir"]["name"].endswith("e_dir")
 
     def test_ls_subdirectory(self, fs: SynapseFS) -> None:
         """Verify that ls lists children of a subdirectory."""
