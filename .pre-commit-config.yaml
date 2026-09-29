@@ -2,7 +2,7 @@ exclude: '^docs/conf.py'
 
 repos:
 - repo: https://github.com/pre-commit/pre-commit-hooks
-  rev: v4.4.0
+  rev: v6.0.0
   hooks:
   - id: trailing-whitespace
   - id: check-added-large-files
@@ -18,12 +18,12 @@ repos:
     args: ['--fix=auto']  # replace 'auto' with 'lf' to enforce Linux/Mac line endings or 'crlf' for Windows
 
 - repo: https://github.com/PyCQA/autoflake
-  rev: v2.0.0
+  rev: v2.4.0
   hooks:
   - id: autoflake
 
 - repo: https://github.com/pycqa/isort
-  rev: 5.12.0
+  rev: 9.0.2
   hooks:
   - id: isort
 
@@ -58,7 +58,7 @@ repos:
   - id: nbstripout
 
 - repo: https://github.com/econchick/interrogate
-  rev: 1.6.0
+  rev: 1.7.0
   hooks:
   - id: interrogate
     args: [--verbose, --fail-under=0]
