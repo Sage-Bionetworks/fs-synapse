@@ -3,7 +3,10 @@ from __future__ import annotations
 import io
 import os
 from collections.abc import Callable, Iterable
-from typing import IO, BinaryIO
+from typing import IO, TYPE_CHECKING, BinaryIO
+
+if TYPE_CHECKING:
+    from typing_extensions import Buffer
 
 
 class RemoteFile(io.IOBase, BinaryIO):
@@ -116,7 +119,7 @@ class RemoteFile(io.IOBase, BinaryIO):
             raise IOError("not open for reading")
         return self._f.read(n)
 
-    def write(self, b: bytes) -> int:
+    def write(self, b: Buffer) -> int:
         """Write bytes to the file and return the number of bytes written."""
         if not self.writable():
             raise IOError("not open for writing")
