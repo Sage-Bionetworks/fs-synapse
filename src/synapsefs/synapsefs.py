@@ -422,12 +422,10 @@ class SynapseFS(AbstractFileSystem):  # type: ignore[misc]
     @overload
     def ls(
         self, path: str, detail: Literal[True] = ..., **kwargs: Any
-    ) -> list[dict[str, Any]]:
-        ...
+    ) -> list[dict[str, Any]]: ...
 
     @overload
-    def ls(self, path: str, detail: Literal[False], **kwargs: Any) -> list[str]:
-        ...
+    def ls(self, path: str, detail: Literal[False], **kwargs: Any) -> list[str]: ...
 
     def ls(
         self, path: str, detail: bool = True, **kwargs: Any
