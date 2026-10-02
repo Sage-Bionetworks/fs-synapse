@@ -6,7 +6,7 @@ fsspec adapter for Synapse — exposes Synapse files, folders, and projects thro
 
 ## Stack
 
-- Python >=3.11, <3.15 (CI tests 3.11–3.14 on ubuntu + macos)
+- Python >=3.11, <3.16 (CI tests 3.11–3.15 on ubuntu + macos)
 - `fsspec>=2026.0.0`
 - `synapseclient>=4.10.0`
 - pytest ~9.0, pytest-xdist, pytest-mock, pytest-cov, pytest-rerunfailures, hypothesis, nbmake
