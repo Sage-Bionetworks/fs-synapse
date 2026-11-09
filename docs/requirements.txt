@@ -6,4 +6,4 @@ myst-parser[linkify]
 sphinx>=3.2.1
 sphinx-autodoc-typehints
 sphinx-rtd-theme
-synapseclient>=4.10.0
+synapseclient>=4.15.0
